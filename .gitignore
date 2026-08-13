@@ -1,2 +1,11 @@
 # Generated knowledge graph (graphify local output, rebuilt by `graphify update`)
 graphify-out/
+
+.venv/
+
+__pycache__/
+
+.mypy_cache/
+
+.ruff_cache/
+

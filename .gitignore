@@ -9,3 +9,10 @@ __pycache__/
 
 .ruff_cache/
 
+.env
+
+clausebridge-api.code-workspace/
+
+.vscode/
+
+clausebridge_api.egg-info/

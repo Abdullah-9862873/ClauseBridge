@@ -19,7 +19,9 @@ class ApiKey(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     key_hash: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    rate_limit_per_hour: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    rate_limit_per_hour: Mapped[int] = mapped_column(
+        Integer, default=100, nullable=False
+    )
     last_used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

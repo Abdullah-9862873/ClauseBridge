@@ -31,4 +31,4 @@ plugins = ["pydantic.mypy"]
 exclude = ["alembic/versions/*"]
 
 [tool.setuptools.packages.find]
-include = ["core*", "db*"]
+include = ["core*", "db*", "models*"]

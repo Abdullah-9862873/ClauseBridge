@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
+    supabase_storage_access_key: str
+    supabase_storage_secret: str
+    supabase_storage_endpoint: str
+    supabase_storage_bucket: str
 
 
 settings = Settings()

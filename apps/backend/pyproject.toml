@@ -15,6 +15,7 @@ dependencies = [
     "asyncpg",
     "alembic",
     "pgvector",
+    "boto3",
 ]
 
 [dependency-groups]
@@ -31,4 +32,4 @@ plugins = ["pydantic.mypy"]
 exclude = ["alembic/versions/*"]
 
 [tool.setuptools.packages.find]
-include = ["core*", "db*", "models*"]
+include = ["core*", "db*", "models*", "storage*"]

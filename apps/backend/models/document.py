@@ -26,6 +26,9 @@ class Document(Base):
     storage_url: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="queued", nullable=False)
     file_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    idempotency_key_hash: Mapped[str | None] = mapped_column(
+        String(64), unique=True, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

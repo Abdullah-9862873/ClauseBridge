@@ -26,3 +26,12 @@ def generate_presigned_upload_url(
         ExpiresIn=expires,
     )
     return url
+
+
+def download_object(key: str) -> bytes:
+    response = s3.get_object(
+        Bucket=settings.supabase_storage_bucket,
+        Key=key,
+    )
+    body: bytes = response["Body"].read()
+    return body

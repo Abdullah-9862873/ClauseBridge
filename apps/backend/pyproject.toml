@@ -16,6 +16,10 @@ dependencies = [
     "alembic",
     "pgvector",
     "boto3",
+    "celery",
+    "redis",
+    "pypdf",
+    "sentence-transformers",
 ]
 
 [dependency-groups]
@@ -32,4 +36,4 @@ plugins = ["pydantic.mypy"]
 exclude = ["alembic/versions/*"]
 
 [tool.setuptools.packages.find]
-include = ["core*", "db*", "models*", "storage*"]
+include = ["core*", "db*", "models*", "storage*", "workers*"]

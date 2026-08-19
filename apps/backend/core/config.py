@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     supabase_storage_secret: str
     supabase_storage_endpoint: str
     supabase_storage_bucket: str
+    redis_url: str
 
 
 settings = Settings()

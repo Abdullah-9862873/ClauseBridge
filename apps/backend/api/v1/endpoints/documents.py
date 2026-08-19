@@ -10,6 +10,7 @@ from api.v1.endpoints.cases import _get_owned_case
 from db.session import get_session
 from models import Document, User
 from storage.s3_client import generate_presigned_upload_url
+from workers.tasks import ingest_document
 
 router = APIRouter(prefix="/cases", tags=["documents"])
 MAX_SIZE_BYTES = 10 * 1024 * 1024
@@ -61,6 +62,7 @@ async def create_document(
     )
     session.add(doc)
     await session.commit()
+    ingest_document.delay(str(doc.id))
     upload_url = generate_presigned_upload_url(key, content_type)
     return {
         "document_id": str(doc.id),

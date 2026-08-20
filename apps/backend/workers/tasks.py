@@ -1,18 +1,17 @@
-from models import Clause
-from workers.chunking import split_into_chunks
-from workers.embeddings import embed_texts
-
-import uuid
 import asyncio
 import logging
+import uuid
 
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+from celery import Task  # type: ignore[import-untyped]
 from celery.exceptions import MaxRetriesExceededError  # type: ignore[import-untyped]
 
 from db.session import SessionLocal
-from models import Document
+from models import Clause, Document
 from storage.s3_client import download_object
 from workers.celery_app import celery_app
+from workers.chunking import split_into_chunks
+from workers.embeddings import embed_texts
 from workers.pdf_parser import extract_text_from_pdf
 
 logger = logging.getLogger(__name__)
@@ -63,8 +62,9 @@ async def _run_pipeline(document_id: str) -> None:
         raise
     await _set_status(document_id, "done")
 
+
 @celery_app.task(bind=True, max_retries=6)  # type: ignore[untyped-decorator]
-def ingest_document(self, document_id: str) -> str:
+def ingest_document(self: Task, document_id: str) -> str:
     try:
         asyncio.run(_run_pipeline(document_id))
     except ClientError as exc:

@@ -1,3 +1,8 @@
+from models import Clause
+from workers.chunking import split_into_chunks
+from workers.embeddings import embed_texts
+
+import uuid
 import asyncio
 import logging
 
@@ -39,11 +44,24 @@ async def _run_pipeline(document_id: str) -> None:
         pdf_bytes = download_object(key)
         text = extract_text_from_pdf(pdf_bytes)
         logger.info("document %s extracted %d chars", document_id, len(text))
+        chunks = split_into_chunks(text)
+        vectors = embed_texts(chunks)
+        async with SessionLocal() as session:
+            for position, (chunk, vector) in enumerate(zip(chunks, vectors), start=1):
+                clause = Clause(
+                    document_id=uuid.UUID(document_id),
+                    clause_text=chunk,
+                    clause_type="general",
+                    page_number=1,
+                    embedding=vector,
+                )
+                session.add(clause)
+            await session.commit()
+        logger.info("document %s saved %d clauses", document_id, len(chunks))
     except Exception:
         logger.exception("processing failed for %s", document_id)
         raise
     await _set_status(document_id, "done")
-
 
 @celery_app.task(bind=True, max_retries=6)  # type: ignore[untyped-decorator]
 def ingest_document(self, document_id: str) -> str:

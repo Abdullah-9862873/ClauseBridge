@@ -53,6 +53,7 @@ async def create_document(
     document_id = uuid.uuid4()
     key = f"cases/{case_id}/{document_id}.pdf"
     doc = Document(
+        id=document_id,
         case_id=case.id,
         filename="",
         storage_url=key,

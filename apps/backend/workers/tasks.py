@@ -8,6 +8,8 @@ from celery.exceptions import MaxRetriesExceededError  # type: ignore[import-unt
 
 from db.session import SessionLocal
 from models import Clause, Document
+from services.classification_service import classify_document
+from services.injection_guard import check_injection
 from storage.s3_client import download_object
 from workers.celery_app import celery_app
 from workers.chunking import split_into_chunks
@@ -43,6 +45,8 @@ async def _run_pipeline(document_id: str) -> None:
         pdf_bytes = download_object(key)
         text = extract_text_from_pdf(pdf_bytes)
         logger.info("document %s extracted %d chars", document_id, len(text))
+        await check_injection(text)
+        await classify_document(document_id, text)
         chunks = split_into_chunks(text)
         vectors = embed_texts(chunks)
         async with SessionLocal() as session:

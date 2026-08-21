@@ -29,6 +29,8 @@ class Document(Base):
     idempotency_key_hash: Mapped[str | None] = mapped_column(
         String(64), unique=True, nullable=True
     )
+    document_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    classification_confidence: Mapped[float | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

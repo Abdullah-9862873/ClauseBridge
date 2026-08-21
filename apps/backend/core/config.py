@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     supabase_storage_endpoint: str
     supabase_storage_bucket: str
     redis_url: str
+    groq_api_key: str
+    llm_provider: str
+    cache_ttl_seconds: int
 
 
 settings = Settings()

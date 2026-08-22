@@ -1,10 +1,12 @@
 import asyncio
 import logging
 import uuid
+import hashlib
 
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 from celery import Task  # type: ignore[import-untyped]
 from celery.exceptions import MaxRetriesExceededError  # type: ignore[import-untyped]
+from sqlalchemy import select, and_, update
 
 from db.session import SessionLocal
 from models import Clause, Document
@@ -34,7 +36,6 @@ async def _set_status(document_id: str, new_status: str) -> None:
         await session.commit()
         logger.info("document %s -> %s", document_id, new_status)
 
-
 async def _run_pipeline(document_id: str) -> None:
     await _set_status(document_id, "processing")
     try:
@@ -45,6 +46,21 @@ async def _run_pipeline(document_id: str) -> None:
         pdf_bytes = download_object(key)
         text = extract_text_from_pdf(pdf_bytes)
         logger.info("document %s extracted %d chars", document_id, len(text))
+        text_hash = hashlib.sha256(text.encode()).hexdigest()
+        async with SessionLocal() as session:
+            existing = await session.execute(
+                select(Document.id)
+                .where(and_(
+                    Document.case_id == doc.case_id,
+                    Document.content_hash == text_hash,
+                    Document.id != uuid.UUID(document_id),
+                ))
+                .limit(1)
+            )
+            if existing.scalar_one_or_none() is not None:
+                logger.info("duplicate content detected for document %s, skipping", document_id)
+                await _set_status(document_id, "done")
+                return
         await check_injection(text)
         await classify_document(document_id, text)
         chunks = split_into_chunks(text)
@@ -59,6 +75,11 @@ async def _run_pipeline(document_id: str) -> None:
                     embedding=vector,
                 )
                 session.add(clause)
+            await session.execute(
+                update(Document)
+                .where(Document.id == uuid.UUID(document_id))
+                .values(content_hash=text_hash)
+            )
             await session.commit()
         logger.info("document %s saved %d clauses", document_id, len(chunks))
     except Exception:

@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from api.v1.endpoints import auth, cases, clauses, documents, firms
+from api.v1.endpoints import auth, cases, clauses, documents, firms, anomalies
 
 router = APIRouter(prefix="/api/v1")
 
@@ -19,3 +19,4 @@ router.include_router(firms.router)
 router.include_router(cases.router)
 router.include_router(documents.router)
 router.include_router(clauses.router)
+router.include_router(anomalies.router)

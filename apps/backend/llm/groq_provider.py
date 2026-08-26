@@ -24,7 +24,7 @@ def _strip_markdown(text: str) -> str:
 
 def _strip_think_tags(text: str) -> str:
     """Strip thinking blocks from Qwen model responses."""
-    pattern = r""
+    pattern = r".*?</think>\n?"
     return re.sub(pattern, "", text, flags=re.DOTALL).strip()
 
 
@@ -101,3 +101,31 @@ class GroqProvider(LLMProvider):
         )
         content = response.choices[0].message.content or "false"
         return content.strip().lower() == "true"
+        
+    async def detect_anomalies(
+        self, clause_text: str, clause_type: str, standard_text: str
+    ) -> dict[str, Any]:
+        """Compare a clause against a firm standard template.
+        Returns: {"is_anomaly": bool, "severity": str, "reasons": str, "confidence": float}
+        """
+        cached = get_cached("anomaly", clause_text[:2000] + standard_text[:2000])
+        if cached:
+            return cached  # type: ignore[return-value]
+        prompt = self._load_prompt("detect_anomalies.txt")
+        user_content = f"Clause type: {clause_type}\n\nExtracted clause:\n{clause_text}\n\nFirm standard template:\n{standard_text}"
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.0,
+        )
+        content = response.choices[0].message.content or "{}"
+        try:
+            result: dict[str, Any] = json.loads(content)
+        except json.JSONDecodeError:
+            logger.warning("detect_anomalies JSON parse failed, using default")
+            result = {"is_anomaly": False, "severity": "low", "reasons": "", "confidence": 0.0}
+        set_cached("anomaly", clause_text[:2000] + standard_text[:2000], result)
+        return result

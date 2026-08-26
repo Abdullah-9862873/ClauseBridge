@@ -22,3 +22,9 @@ class LLMProvider(ABC):
     async def check_injection(self, text: str) -> bool:
         """Check if text contains a prompt injection attempt."""
         ...
+    @abstractmethod
+    async def detect_anomalies(self, clause_text: str, clause_type: str, standard_text: str) -> dict[str, Any]:
+        """Compare a clause against a firm standard template.
+        Returns: {"is_anomaly": bool, "severity": str, "reasons": str, "confidence": float}
+        """
+        ...

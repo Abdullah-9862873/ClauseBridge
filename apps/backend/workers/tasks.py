@@ -9,13 +9,13 @@ from celery.exceptions import MaxRetriesExceededError  # type: ignore[import-unt
 from sqlalchemy import select, and_, update
 
 from db.session import SessionLocal
-from models import Clause, Document
+from models import Document
 from services.classification_service import classify_document
 from services.injection_guard import check_injection
+from services.anomaly_detection_service import detect_anomalies_for_document
 from storage.s3_client import download_object
 from workers.celery_app import celery_app
-from workers.chunking import split_into_chunks
-from workers.embeddings import embed_texts
+from services.clause_extraction_service import extract_and_store_clauses
 from workers.pdf_parser import extract_text_from_pdf
 
 logger = logging.getLogger(__name__)
@@ -63,25 +63,17 @@ async def _run_pipeline(document_id: str) -> None:
                 return
         await check_injection(text)
         await classify_document(document_id, text)
-        chunks = split_into_chunks(text)
-        vectors = embed_texts(chunks)
+        clause_count = await extract_and_store_clauses(document_id, text)
         async with SessionLocal() as session:
-            for position, (chunk, vector) in enumerate(zip(chunks, vectors), start=1):
-                clause = Clause(
-                    document_id=uuid.UUID(document_id),
-                    clause_text=chunk,
-                    clause_type="general",
-                    page_number=1,
-                    embedding=vector,
-                )
-                session.add(clause)
             await session.execute(
                 update(Document)
                 .where(Document.id == uuid.UUID(document_id))
                 .values(content_hash=text_hash)
             )
             await session.commit()
-        logger.info("document %s saved %d clauses", document_id, len(chunks))
+        logger.info("document %s saved %d clauses", document_id, clause_count)
+        anomalies_found = await detect_anomalies_for_document(document_id)
+        logger.info("document %s: %d anomalies found", document_id, anomalies_found)
     except Exception:
         logger.exception("processing failed for %s", document_id)
         raise

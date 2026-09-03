@@ -1,21 +1,21 @@
 import asyncio
+import hashlib
 import logging
 import uuid
-import hashlib
 
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 from celery import Task  # type: ignore[import-untyped]
 from celery.exceptions import MaxRetriesExceededError  # type: ignore[import-untyped]
-from sqlalchemy import select, and_, update
+from sqlalchemy import and_, select, update
 
 from db.session import SessionLocal
 from models import Document
-from services.classification_service import classify_document
-from services.injection_guard import check_injection
 from services.anomaly_detection_service import detect_anomalies_for_document
+from services.classification_service import classify_document
+from services.clause_extraction_service import extract_and_store_clauses
+from services.injection_guard import check_injection
 from storage.s3_client import download_object
 from workers.celery_app import celery_app
-from services.clause_extraction_service import extract_and_store_clauses
 from workers.pdf_parser import extract_text_from_pdf
 
 logger = logging.getLogger(__name__)
@@ -62,8 +62,15 @@ async def _run_pipeline(document_id: str) -> None:
                 await _set_status(document_id, "done")
                 return
         await check_injection(text)
-        await classify_document(document_id, text)
-        clause_count = await extract_and_store_clauses(document_id, text)
+        classification = await classify_document(document_id, text)
+        doc_type = classification.get("type", "other")
+        if doc_type == "other":
+            logger.info("document %s classified as non-legal (%s), skipping extraction", document_id, doc_type)
+        else:
+            clause_count = await extract_and_store_clauses(document_id, text)
+            logger.info("document %s saved %d clauses", document_id, clause_count)
+            anomalies_found = await detect_anomalies_for_document(document_id)
+            logger.info("document %s: %d anomalies found", document_id, anomalies_found)
         async with SessionLocal() as session:
             await session.execute(
                 update(Document)
@@ -71,9 +78,6 @@ async def _run_pipeline(document_id: str) -> None:
                 .values(content_hash=text_hash)
             )
             await session.commit()
-        logger.info("document %s saved %d clauses", document_id, clause_count)
-        anomalies_found = await detect_anomalies_for_document(document_id)
-        logger.info("document %s: %d anomalies found", document_id, anomalies_found)
     except Exception:
         logger.exception("processing failed for %s", document_id)
         raise

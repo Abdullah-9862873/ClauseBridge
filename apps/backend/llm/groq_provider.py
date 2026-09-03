@@ -1,14 +1,14 @@
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any
-import logging
 
 import groq
 
+from cache.llm_cache import get_cached, set_cached
 from core.config import settings
 from llm.base import LLMProvider
-from cache.llm_cache import get_cached, set_cached
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 logger = logging.getLogger(__name__)
@@ -78,6 +78,7 @@ class GroqProvider(LLMProvider):
                 {"role": "user", "content": text[:2000]},
             ],
             temperature=0.0,
+            response_format={"type": "json_object"},
         )
         content = response.choices[0].message.content or "[]"
         logger.info("extract_clauses raw response: %r", content[:200])
@@ -123,7 +124,7 @@ class GroqProvider(LLMProvider):
         )
         content = response.choices[0].message.content or "{}"
         try:
-            result: dict[str, Any] = json.loads(content)
+            result: dict[str, Any] = json.loads(_strip_think_tags(_strip_markdown(content)))
         except json.JSONDecodeError:
             logger.warning("detect_anomalies JSON parse failed, using default")
             result = {"is_anomaly": False, "severity": "low", "reasons": "", "confidence": 0.0}

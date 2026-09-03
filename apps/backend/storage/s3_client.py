@@ -28,6 +28,27 @@ def generate_presigned_upload_url(
     return url
 
 
+def upload_file_to_storage(key: str, data: bytes, content_type: str) -> None:
+    s3.put_object(
+        Bucket=settings.supabase_storage_bucket,
+        Key=key,
+        Body=data,
+        ContentType=content_type,
+    )
+
+
+def generate_presigned_download_url(key: str, expires: int = 3600) -> str:
+    url: str = s3.generate_presigned_url(
+        "get_object",
+        Params={
+            "Bucket": settings.supabase_storage_bucket,
+            "Key": key,
+        },
+        ExpiresIn=expires,
+    )
+    return url
+
+
 def download_object(key: str) -> bytes:
     response = s3.get_object(
         Bucket=settings.supabase_storage_bucket,

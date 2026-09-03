@@ -1,16 +1,15 @@
-from typing import Annotated
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from api.v1.deps import get_current_user
-from db.session import get_session
-from models import Clause, Document, User
-from fastapi import HTTPException
 import base64
 import json
 from datetime import datetime
-from sqlalchemy import or_
+from typing import Annotated
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.v1.deps import get_current_user
+from db.session import get_session
+from models import Clause, Document, User
 
 router = APIRouter(prefix="/cases", tags=["clauses"])
 
@@ -57,8 +56,6 @@ async def list_clauses(
     next_cursor = None
     if has_next and clauses:
         last = clauses[-1]
-        import base64
-        import json
         next_cursor = base64.b64encode(
             json.dumps([last.created_at.isoformat(), str(last.id)]).encode()
         ).decode()

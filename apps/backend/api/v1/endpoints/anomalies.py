@@ -3,14 +3,15 @@ import json
 import uuid
 from datetime import datetime
 from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from api.v1.deps import get_current_user
 from db.session import get_session
 from models import Anomaly, Clause, Document, User
-
 
 router = APIRouter(prefix="/cases", tags=["anomalies"])
 
@@ -28,6 +29,7 @@ async def list_anomalies(
     session: Annotated[AsyncSession, Depends(get_session)],
     limit: int = Query(20, ge=1, le=100),
     cursor: str | None = Query(None),
+    document_id: str | None = Query(None),
 ) -> dict[str, object]:
     query = (
         select(Anomaly)
@@ -36,6 +38,8 @@ async def list_anomalies(
         .where(Document.case_id == uuid.UUID(case_id.strip()))
         .order_by(Anomaly.created_at.desc(), Anomaly.id)
     )
+    if document_id:
+        query = query.where(Clause.document_id == uuid.UUID(document_id))
     if cursor:
         anchor_time, anchor_id = _decode_cursor(cursor)
         query = query.where(

@@ -1,11 +1,10 @@
 import logging
 import uuid
-from db.session import SessionLocal
-from models.clause import Clause
-from workers.chunking import split_into_chunks
-from workers.embeddings import embed_texts
 
+from db.session import SessionLocal
 from llm.groq_provider import GroqProvider
+from models.clause import Clause
+from workers.embeddings import embed_texts
 
 llm = GroqProvider()
 

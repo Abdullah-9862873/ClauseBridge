@@ -30,6 +30,7 @@ export default function DocumentDetailPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [anomalyFilter, setAnomalyFilter] = useState<string>('all');
   const [zoom, setZoom] = useState(1);
+  const [searchInput, setSearchInput] = useState('');
   const pdfViewerRef = useRef<PdfViewerHandle>(null);
 
   const { data: document, isLoading: docLoading } = useDocument(caseId, docId);
@@ -88,7 +89,18 @@ export default function DocumentDetailPage() {
   const status = document?.status || '';
   const isProcessing = status === 'queued' || status === 'processing';
 
-  const displayedClauses = clauseLoading ? [] : clauses.filter((clause) => {
+  const searchText = searchInput.trim();
+
+  const searchFilteredClauses = clauseLoading ? [] : clauses.filter((clause) => {
+    if (!searchText) return true;
+    const term = searchText.toLowerCase();
+    return (
+      clause.clause_text.toLowerCase().includes(term) ||
+      clause.clause_type.toLowerCase().includes(term)
+    );
+  });
+
+  const displayedClauses = searchFilteredClauses.filter((clause) => {
     const anomaly = anomalyByClauseId.get(clause.id);
     if (!anomaly) return false;
     if (anomalyFilter === 'all') return true;
@@ -191,6 +203,7 @@ export default function DocumentDetailPage() {
                   onPageChange={setCurrentPage}
                   zoom={zoom}
                   onZoomChange={setZoom}
+                  searchText={searchText}
                 />
               ) : status === 'error' ? (
                 <div style={{ textAlign: 'center', padding: '40px 0' }}>
@@ -212,6 +225,30 @@ export default function DocumentDetailPage() {
                   {clauseLoading ? 'Loading...' : `${clauses.length} clause${clauses.length !== 1 ? 's' : ''} found`}
                 </p>
               </div>
+
+              {clauses.length > 0 && (
+                <div className="search-wrap">
+                  <svg className="search-icon" width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.3"/>
+                    <line x1="10.2" y1="10.2" x2="14.5" y2="14.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                  </svg>
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder="Search clauses..."
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                  />
+                  {searchInput && (
+                    <button
+                      className="search-clear"
+                      onClick={() => setSearchInput('')}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              )}
 
               {hasAnomalies && (
                 <div className="filter-row">
@@ -237,6 +274,10 @@ export default function DocumentDetailPage() {
               ) : clauses.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--ink-50)', fontSize: '13px' }}>
                   {status === 'done' ? 'No clauses extracted' : 'Clauses will appear after processing'}
+                </div>
+              ) : searchText && searchFilteredClauses.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--ink-50)', fontSize: '13px' }}>
+                  No clauses matching &ldquo;{searchText}&rdquo;
                 </div>
               ) : displayedClauses.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--ink-50)', fontSize: '13px' }}>
@@ -267,14 +308,14 @@ export default function DocumentDetailPage() {
                           {anomaly && (
                             <span
                               style={{
-                                fontSize: '10px',
-                                fontWeight: 600,
-                                padding: '2px 7px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                padding: '3px 9px',
                                 borderRadius: '10px',
                                 color: '#fff',
                                 background: anomaly.severity === 'high' ? 'var(--flag)' : anomaly.severity === 'medium' ? 'var(--brass)' : 'var(--ok)',
                                 textTransform: 'uppercase',
-                                letterSpacing: '0.3px',
+                                letterSpacing: '0.4px',
                               }}
                             >
                               {anomaly.severity}
@@ -315,13 +356,39 @@ export default function DocumentDetailPage() {
                         </div>
                       )}
                       {anomaly && selectedClause === clause.id && (
-                        <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--line)' }}>
-                          <div style={{ fontSize: '12px', color: 'var(--flag)', fontWeight: 500, marginBottom: '4px' }}>
-                            Anomaly reason:
+                        <div className="anomaly-detail">
+                          <div className="anomaly-detail-header">
+                            <span className="anomaly-detail-title">Anomaly Detail</span>
+                            <span
+                              className="anomaly-detail-severity"
+                              style={{
+                                background: anomaly.severity === 'high' ? 'var(--flag)' : anomaly.severity === 'medium' ? 'var(--brass)' : 'var(--ok)',
+                              }}
+                            >
+                              {anomaly.severity}
+                            </span>
                           </div>
-                          <p style={{ fontSize: '12.5px', color: 'var(--ink-70)', lineHeight: 1.5 }}>
-                            {anomaly.reasons}
-                          </p>
+                          <div className="anomaly-detail-grid">
+                            <div className="anomaly-detail-field">
+                              <span className="anomaly-detail-label">Confidence</span>
+                              <div className="anomaly-detail-confidence">
+                                <div className="anomaly-detail-conf-bar">
+                                  <span style={{ width: `${anomaly.confidence * 100}%` }} />
+                                </div>
+                                <span className="anomaly-detail-conf-num">{(anomaly.confidence * 100).toFixed(0)}%</span>
+                              </div>
+                            </div>
+                            <div className="anomaly-detail-field">
+                              <span className="anomaly-detail-label">Detected</span>
+                              <span className="anomaly-detail-value">
+                                {new Date(anomaly.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="anomaly-detail-reason">
+                            <span className="anomaly-detail-label">Reasoning</span>
+                            <p>{anomaly.reasons}</p>
+                          </div>
                         </div>
                       )}
                     </div>

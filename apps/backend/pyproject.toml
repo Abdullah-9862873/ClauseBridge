@@ -20,6 +20,7 @@ dependencies = [
     "redis",
     "pypdf",
     "sentence-transformers",
+    "fpdf2",
 ]
 
 [dependency-groups]

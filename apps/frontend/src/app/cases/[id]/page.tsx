@@ -62,6 +62,7 @@ export default function CaseDetailPage() {
   const [uploadError, setUploadError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [localDocuments, setLocalDocuments] = useState<Document[] | null>(null);
+  const [downloadStatus, setDownloadStatus] = useState('');
 
   const { data: caseDetail } = useQuery<CaseDetail>({
     queryKey: ['case', caseId],
@@ -272,16 +273,51 @@ export default function CaseDetailPage() {
                 </div>
               </div>
             </div>
-            <label className="btn btn-primary" style={{ width: 'auto', marginTop: 0, cursor: 'pointer' }}>
-              {uploading ? 'Uploading...' : 'Upload PDF'}
-              <input
-                type="file"
-                accept=".pdf"
-                onChange={handleUpload}
-                disabled={uploading}
-                style={{ display: 'none' }}
-              />
-            </label>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              {documents.length > 0 && (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={!!downloadStatus}
+                  onClick={async () => {
+                    try {
+                      setDownloadStatus('Fetching details...');
+                      await new Promise((r) => setTimeout(r, 400));
+                      setDownloadStatus('Compiling document...');
+                      const token = localStorage.getItem('access_token');
+                      const res = await fetch(`${API}/api/v1/cases/${caseId}/report/pdf`, {
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                      });
+                      if (!res.ok) throw new Error(`Failed: ${res.status}`);
+                      setDownloadStatus('Downloading...');
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'clausebridge-report.pdf';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      await new Promise((r) => setTimeout(r, 500));
+                    } catch {
+                      // error handled silently
+                    } finally {
+                      setDownloadStatus('');
+                    }
+                  }}
+                >
+                  {downloadStatus || 'Download Report'}
+                </button>
+              )}
+              <label className="btn btn-primary" style={{ width: 'auto', marginTop: 0, cursor: 'pointer' }}>
+                {uploading ? 'Uploading...' : 'Upload PDF'}
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleUpload}
+                  disabled={uploading}
+                  style={{ display: 'none' }}
+                />
+              </label>
+            </div>
           </div>
 
           {uploadError && (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useImperativeHandle, forwardRef } from 'react';
+import { useEffect, useState, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
 import dynamic from 'next/dynamic';
 
 const ReactPDF = dynamic(() => import('react-pdf').then(mod => mod.Document), { ssr: false });
@@ -18,11 +18,12 @@ interface PdfViewerProps {
   onPageChange: (page: number) => void;
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
+  searchText?: string;
   className?: string;
 }
 
 export const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
-  function PdfViewer({ url, currentPage, onPageChange, zoom = 1, onZoomChange, className }, ref) {
+  function PdfViewer({ url, currentPage, onPageChange, zoom = 1, onZoomChange, searchText, className }, ref) {
     const [numPages, setNumPages] = useState(0);
     const [containerWidth, setContainerWidth] = useState(600);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -82,6 +83,21 @@ export const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
 
     const pageWidth = Math.max(300, containerWidth * zoom);
 
+    const customTextRenderer = useCallback(
+      ({ str }: { str: string }) => {
+        if (!searchText || !str) return str;
+        const escaped = str.replace(/[&<>"']/g, (c) =>
+          ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string)
+        );
+        const pattern = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return escaped.replace(
+          new RegExp(`(${pattern})`, 'gi'),
+          '<mark>$1</mark>'
+        );
+      },
+      [searchText]
+    );
+
     return (
       <div className={className}>
         <div className="pdf-toolbar">
@@ -133,7 +149,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
             loading={<div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--ink-50)' }}>Loading PDF...</div>}
             error={<div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--flag)' }}>Failed to load PDF</div>}
           >
-            <ReactPDFPage pageNumber={currentPage} width={pageWidth} />
+            <ReactPDFPage pageNumber={currentPage} width={pageWidth} customTextRenderer={customTextRenderer} />
           </ReactPDF>
         </div>
       </div>

@@ -32,6 +32,11 @@ export function getPdfUrl(caseId: string, docId: string): string {
   return `${API}/api/v1/cases/${caseId}/documents/${docId}/pdf?token=${token}`;
 }
 
+export function getReportUrl(caseId: string): string {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+  return `${API}/api/v1/cases/${caseId}/report/pdf?token=${token}`;
+}
+
 export function useDocument(caseId: string, docId: string) {
   return useQuery<DocumentDetail>({
     queryKey: ['document', caseId, docId],

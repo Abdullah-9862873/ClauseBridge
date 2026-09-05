@@ -4,6 +4,7 @@ import { Newsreader, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import QueryProvider from "@/lib/query-provider";
 import { ToastProvider } from "@/lib/toast-context";
+import { AuthProvider } from "@/lib/auth-context";
 import ToastContainer from "@/components/Toast";
 import AuthGuard from "@/components/AuthGuard";
 
@@ -47,12 +48,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <QueryProvider>
-          <ToastProvider>
-            <AuthGuard>
-              {children}
-            </AuthGuard>
-            <ToastContainer />
-          </ToastProvider>
+          <AuthProvider>
+            <ToastProvider>
+              <AuthGuard>
+                {children}
+              </AuthGuard>
+              <ToastContainer />
+            </ToastProvider>
+          </AuthProvider>
         </QueryProvider>
       </body>
     </html>

@@ -17,6 +17,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     }
     const token = localStorage.getItem('access_token');
     if (!token) {
+      localStorage.removeItem('refresh_token');
       router.replace('/login');
     } else {
       setChecked(true);

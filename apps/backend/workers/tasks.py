@@ -100,8 +100,13 @@ def ingest_document(self: Task, document_id: str) -> str:
                 pass
         asyncio.run(_set_status(document_id, "error"))
         raise
-    except Exception:
-        logger.exception("processing failed for %s", document_id)
+    except Exception as exc:
+        logger.exception("processing failed for %s (attempt %d)", document_id, self.request.retries + 1)
+        if self.request.retries < 3:
+            try:
+                raise self.retry(countdown=30, exc=exc)
+            except MaxRetriesExceededError:
+                pass
         asyncio.run(_set_status(document_id, "error"))
         raise
     return document_id

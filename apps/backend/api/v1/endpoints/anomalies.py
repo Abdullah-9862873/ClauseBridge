@@ -20,8 +20,11 @@ def _encode_cursor(created_at: datetime, anomaly_id: uuid.UUID) -> str:
         json.dumps([created_at.isoformat(), str(anomaly_id)]).encode()
     ).decode()
 def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
-    created_at_iso, anomaly_id = json.loads(base64.urlsafe_b64decode(cursor.encode()))
-    return datetime.fromisoformat(created_at_iso), uuid.UUID(anomaly_id)
+    try:
+        created_at_iso, anomaly_id = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+        return datetime.fromisoformat(created_at_iso), uuid.UUID(anomaly_id)
+    except (ValueError, json.JSONDecodeError, uuid.UUIDError):
+        raise HTTPException(status_code=400, detail="invalid cursor")
 @router.get("/{case_id}/anomalies")
 async def list_anomalies(
     case_id: str,
@@ -33,15 +36,22 @@ async def list_anomalies(
     severity: str | None = Query(None),
     reviewed: bool | None = Query(None),
 ) -> dict[str, object]:
+    try:
+        case_uuid = uuid.UUID(case_id.strip())
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="invalid case_id")
     query = (
         select(Anomaly)
         .join(Clause, Clause.id == Anomaly.clause_id)
         .join(Document, Document.id == Clause.document_id)
-        .where(Document.case_id == uuid.UUID(case_id.strip()))
+        .where(Document.case_id == case_uuid)
         .order_by(Anomaly.created_at.desc(), Anomaly.id)
     )
     if document_id:
-        query = query.where(Clause.document_id == uuid.UUID(document_id))
+        try:
+            query = query.where(Clause.document_id == uuid.UUID(document_id))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid document_id")
     if severity:
         query = query.where(Anomaly.severity == severity)
     if reviewed is not None:

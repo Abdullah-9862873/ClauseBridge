@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/lib/toast-context';
+import UserChip from '@/components/UserChip';
 
 interface Case {
   id: string;
@@ -139,6 +140,7 @@ export default function CasesPage() {
       setCases([{ ...newCase, status: 'active', created_at: new Date().toISOString() }, ...cases]);
       setNewTitle('');
       setShowCreate(false);
+      showToast({ message: 'Case created successfully.', type: 'success' });
     } catch {
       setError('Failed to create case');
     } finally {
@@ -176,13 +178,7 @@ export default function CasesPage() {
           </Link>
         </nav>
         <div className="sidebar-spacer" />
-        <div className="user-chip">
-          <div className="avatar">U</div>
-          <div>
-            <div className="name">User</div>
-            <div className="role">Member</div>
-          </div>
-        </div>
+        <UserChip />
       </aside>
 
       <div className="main-content">
@@ -193,7 +189,7 @@ export default function CasesPage() {
             <span className="seg-current">Cases</span>
           </div>
           <div className="topbar-actions">
-            <Link href="/login" className="btn btn-ghost btn-sm" onClick={() => localStorage.removeItem('access_token')}>Sign out</Link>
+            <Link href="/login" className="btn btn-ghost btn-sm" onClick={() => { localStorage.removeItem('access_token'); localStorage.removeItem('refresh_token'); }}>Sign out</Link>
           </div>
         </div>
 
@@ -249,6 +245,19 @@ export default function CasesPage() {
           {loading ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--ink-50)' }}>
               Loading cases...
+            </div>
+          ) : error ? (
+            <div style={{
+              padding: '40px 20px',
+              textAlign: 'center',
+              background: 'var(--surface)',
+              border: '1px solid var(--flag-line)',
+              borderRadius: 'var(--radius)',
+            }}>
+              <p style={{ fontSize: '14px', color: 'var(--flag)', marginBottom: '12px' }}>{error}</p>
+              <button onClick={() => { setError(''); setLoading(true); fetchCases(); }} className="btn btn-ghost btn-sm">
+                Try again
+              </button>
             </div>
           ) : cases.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--ink-50)' }}>

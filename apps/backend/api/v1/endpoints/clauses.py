@@ -37,9 +37,12 @@ async def list_clauses(
     )
     
     if cursor:
-        decoded = json.loads(base64.b64decode(cursor))
-        anchor_time = datetime.fromisoformat(decoded[0])
-        anchor_id = decoded[1]
+        try:
+            decoded = json.loads(base64.b64decode(cursor))
+            anchor_time = datetime.fromisoformat(decoded[0])
+            anchor_id = decoded[1]
+        except (ValueError, json.JSONDecodeError):
+            raise HTTPException(status_code=400, detail="invalid cursor")
         query = query.where(
             or_(
                 Clause.created_at < anchor_time,

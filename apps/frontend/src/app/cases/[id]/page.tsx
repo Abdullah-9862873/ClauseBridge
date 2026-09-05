@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAnomalies } from '@/lib/hooks';
 import { useToast } from '@/lib/toast-context';
+import UserChip from '@/components/UserChip';
 
 const API = 'http://localhost:8000';
 
@@ -63,8 +64,10 @@ export default function CaseDetailPage() {
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [localDocuments, setLocalDocuments] = useState<Document[] | null>(null);
   const [downloadStatus, setDownloadStatus] = useState('');
+  const lastFileRef = useRef<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: caseDetail } = useQuery<CaseDetail>({
+  const { data: caseDetail, isError: caseError } = useQuery<CaseDetail>({
     queryKey: ['case', caseId],
     queryFn: async () => {
       const res = await fetch(`${API}/api/v1/cases/${caseId}`, { headers: authHeaders() });
@@ -73,7 +76,7 @@ export default function CaseDetailPage() {
     },
   });
 
-  const { data: docData } = useQuery<{ items: Document[] }>({
+  const { data: docData, isError: docsError } = useQuery<{ items: Document[] }>({
     queryKey: ['documents', caseId],
     queryFn: async () => {
       const res = await fetch(`${API}/api/v1/cases/${caseId}/documents`, { headers: authHeaders() });
@@ -164,6 +167,7 @@ export default function CaseDetailPage() {
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      lastFileRef.current = file;
 
       if (file.type !== 'application/pdf') {
         setUploadError('Only PDF files are allowed');
@@ -200,6 +204,7 @@ export default function CaseDetailPage() {
         setLocalDocuments(null);
         queryClient.invalidateQueries({ queryKey: ['documents', caseId] });
         e.target.value = '';
+        showToast({ message: 'Document uploaded successfully.', type: 'success' });
       } catch (err: unknown) {
         setUploadError(err instanceof Error ? err.message : 'Upload failed');
       } finally {
@@ -208,6 +213,15 @@ export default function CaseDetailPage() {
     },
     [caseId, queryClient]
   );
+
+  const handleRetryUpload = useCallback(() => {
+    const file = lastFileRef.current;
+    if (!file) return;
+    setUploadError('');
+    setUploading(true);
+    const syntheticEvent = { target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>;
+    handleUpload(syntheticEvent);
+  }, [handleUpload]);
 
   return (
     <div className="app-layout">
@@ -239,13 +253,7 @@ export default function CaseDetailPage() {
           </Link>
         </nav>
         <div className="sidebar-spacer" />
-        <div className="user-chip">
-          <div className="avatar">U</div>
-          <div>
-            <div className="name">User</div>
-            <div className="role">Member</div>
-          </div>
-        </div>
+        <UserChip />
       </aside>
 
       <div className="main-content">
@@ -258,7 +266,7 @@ export default function CaseDetailPage() {
             <span className="seg-current">{caseDetail?.title || 'Case'}</span>
           </div>
           <div className="topbar-actions">
-            <Link href="/login" className="btn btn-ghost btn-sm" onClick={() => localStorage.removeItem('access_token')}>Sign out</Link>
+            <Link href="/login" className="btn btn-ghost btn-sm" onClick={() => { localStorage.removeItem('access_token'); localStorage.removeItem('refresh_token'); }}>Sign out</Link>
           </div>
         </div>
 
@@ -298,7 +306,7 @@ export default function CaseDetailPage() {
                       URL.revokeObjectURL(url);
                       await new Promise((r) => setTimeout(r, 500));
                     } catch {
-                      // error handled silently
+                      showToast({ message: 'Failed to download report.', type: 'error' });
                     } finally {
                       setDownloadStatus('');
                     }
@@ -325,8 +333,19 @@ export default function CaseDetailPage() {
               padding: '10px 13px', background: 'var(--flag-bg)',
               border: '1px solid var(--flag-line)', borderRadius: 'var(--radius)',
               fontSize: '13px', color: 'var(--flag)', marginBottom: '20px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
             }}>
-              {uploadError}
+              <span>{uploadError}</span>
+              <button
+                onClick={handleRetryUpload}
+                style={{
+                  background: 'none', border: '1px solid var(--flag-line)',
+                  color: 'var(--flag)', borderRadius: '4px', padding: '3px 10px',
+                  fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                Retry
+              </button>
             </div>
           )}
 
@@ -338,7 +357,11 @@ export default function CaseDetailPage() {
             <div className="card-head">
               <h3>Documents</h3>
             </div>
-            {documents.length === 0 ? (
+            {caseError || docsError ? (
+              <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--flag)', fontSize: '13.5px' }}>
+                Failed to load data. <button onClick={() => window.location.reload()} style={{ background: 'none', border: 'none', color: 'var(--flag)', textDecoration: 'underline', cursor: 'pointer' }}>Reload page</button>
+              </div>
+            ) : documents.length === 0 ? (
               <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--ink-50)', fontSize: '13.5px' }}>
                 No documents uploaded yet. Upload a PDF to start analysis.
               </div>

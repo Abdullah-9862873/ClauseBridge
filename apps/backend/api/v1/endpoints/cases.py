@@ -45,7 +45,11 @@ def _encode_cursor(created_at: datetime, case_id: uuid.UUID) -> str:
 
 
 def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
-    created_at_iso, case_id = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+    try:
+        created_at_iso, case_id = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+        return datetime.fromisoformat(created_at_iso), uuid.UUID(case_id)
+    except (ValueError, json.JSONDecodeError, uuid.UUIDError):
+        raise HTTPException(status_code=400, detail="invalid cursor")
     return datetime.fromisoformat(created_at_iso), uuid.UUID(case_id)
 
 

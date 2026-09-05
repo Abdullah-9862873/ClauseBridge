@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { useStats } from '@/lib/hooks';
+import UserChip from '@/components/UserChip';
 
 export default function DashboardPage() {
-  const { data: stats } = useStats();
+  const { data: stats, isError } = useStats();
 
   return (
     <div className="app-layout">
@@ -36,13 +37,7 @@ export default function DashboardPage() {
           </Link>
         </nav>
         <div className="sidebar-spacer" />
-        <div className="user-chip">
-          <div className="avatar">U</div>
-          <div>
-            <div className="name">User</div>
-            <div className="role">Member</div>
-          </div>
-        </div>
+        <UserChip />
       </aside>
 
       <div className="main-content">
@@ -51,7 +46,7 @@ export default function DashboardPage() {
             <span className="seg-current">Dashboard</span>
           </div>
           <div className="topbar-actions">
-            <Link href="/login" className="btn btn-ghost btn-sm" onClick={() => localStorage.removeItem('access_token')}>Sign out</Link>
+            <Link href="/login" className="btn btn-ghost btn-sm" onClick={() => { localStorage.removeItem('access_token'); localStorage.removeItem('refresh_token'); }}>Sign out</Link>
           </div>
         </div>
 
@@ -65,18 +60,26 @@ export default function DashboardPage() {
           </div>
 
           <div className="stats-grid">
-            <div className="stat-card">
-              <div className="label">Active cases</div>
-              <div className="value">{stats?.total_cases ?? 0}</div>
-            </div>
-            <div className="stat-card">
-              <div className="label">Documents processed</div>
-              <div className="value">{stats?.total_documents ?? 0}</div>
-            </div>
-            <div className="stat-card">
-              <div className="label">Anomalies flagged</div>
-              <div className="value flag-color">{stats?.anomalies_detected ?? 0}</div>
-            </div>
+            {isError ? (
+              <div style={{ gridColumn: '1 / -1', padding: '40px 20px', textAlign: 'center', color: 'var(--flag)', fontSize: '14px' }}>
+                Failed to load stats
+              </div>
+            ) : (
+              <>
+                <div className="stat-card">
+                  <div className="label">Active cases</div>
+                  <div className="value">{stats?.total_cases ?? 0}</div>
+                </div>
+                <div className="stat-card">
+                  <div className="label">Documents processed</div>
+                  <div className="value">{stats?.total_documents ?? 0}</div>
+                </div>
+                <div className="stat-card">
+                  <div className="label">Anomalies flagged</div>
+                  <div className="value flag-color">{stats?.anomalies_detected ?? 0}</div>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="card">

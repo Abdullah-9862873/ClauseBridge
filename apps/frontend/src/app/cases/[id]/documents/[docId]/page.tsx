@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useDocument, useClauses, useAnomalies, useMarkReviewed, getPdfUrl } from '@/lib/hooks';
 import type { Anomaly } from '@/lib/hooks';
 import { PdfViewer, type PdfViewerHandle } from '@/components/PdfViewer';
+import UserChip from '@/components/UserChip';
 
 const SEVERITY_SEV: Record<string, string> = {
   high: 'sev high',
@@ -138,13 +139,7 @@ export default function DocumentDetailPage() {
           </Link>
         </nav>
         <div className="sidebar-spacer" />
-        <div className="user-chip">
-          <div className="avatar">U</div>
-          <div>
-            <div className="name">User</div>
-            <div className="role">Member</div>
-          </div>
-        </div>
+        <UserChip />
       </aside>
 
       <div className="main-content">

@@ -28,6 +28,7 @@ export default function LoginPage() {
 
       const data = await res.json();
       localStorage.setItem('access_token', data.access_token);
+      localStorage.setItem('refresh_token', data.refresh_token);
       window.location.href = '/dashboard';
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -61,6 +62,7 @@ export default function LoginPage() {
       if (loginRes.ok) {
         const data = await loginRes.json();
         localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('refresh_token', data.refresh_token);
         window.location.href = '/dashboard';
       }
     } catch (err: unknown) {

@@ -9,6 +9,7 @@ from api.v1.deps import get_current_user
 from core.security import (
     create_access_token,
     create_refresh_token,
+    decode_token,
     hash_password,
     verify_password,
 )
@@ -74,3 +75,43 @@ async def me(user: Annotated[User, Depends(get_current_user)]) -> dict[str, str]
         "email": user.email,
         "role": user.role,
     }
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+@router.post("/refresh")
+async def refresh(
+    payload: RefreshRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, str]:
+    user_id = decode_token(payload.refresh_token)
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="invalid refresh token")
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=401, detail="user not found")
+    return {
+        "access_token": create_access_token(str(user.id)),
+        "token_type": "bearer",
+    }
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/password")
+async def change_password(
+    payload: ChangePasswordRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, str]:
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="incorrect current password")
+    user.password_hash = hash_password(payload.new_password)
+    await session.commit()
+    return {"status": "ok"}

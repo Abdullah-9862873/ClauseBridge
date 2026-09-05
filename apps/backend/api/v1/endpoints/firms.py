@@ -25,6 +25,10 @@ class RoleRequest(BaseModel):
     role: str
 
 
+class UpdateFirmRequest(BaseModel):
+    name: str
+
+
 def _invalid_role(role: str) -> bool:
     return role not in VALID_ROLES
 
@@ -42,6 +46,20 @@ async def get_my_firm(
         "name": firm.name,
         "plan_tier": firm.plan_tier,
     }
+
+
+@router.patch("/me")
+async def update_my_firm(
+    payload: UpdateFirmRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, str]:
+    firm = await session.get(Firm, user.firm_id)
+    if firm is None:
+        raise HTTPException(status_code=404, detail="firm not found")
+    firm.name = payload.name
+    await session.commit()
+    return {"id": str(firm.id), "name": firm.name, "plan_tier": firm.plan_tier}
 
 
 @router.post("/members", status_code=201)

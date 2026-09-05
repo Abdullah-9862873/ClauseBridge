@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const API = 'http://localhost:8000';
 
@@ -97,16 +97,83 @@ export interface Anomaly {
   created_at: string;
 }
 
-export function useAnomalies(caseId: string, docId: string) {
+export function useAnomalies(
+  caseId: string,
+  docId: string,
+  filters?: { severity?: string; reviewed?: boolean }
+) {
   return useQuery<{ items: Anomaly[] }>({
-    queryKey: ['anomalies', caseId, docId],
+    queryKey: ['anomalies', caseId, docId, filters],
     queryFn: async () => {
+      const params = new URLSearchParams({ document_id: docId, limit: '100' });
+      if (filters?.severity) params.set('severity', filters.severity);
+      if (filters?.reviewed !== undefined) params.set('reviewed', String(filters.reviewed));
       const res = await fetch(
-        `${API}/api/v1/cases/${caseId}/anomalies?document_id=${docId}&limit=100`,
+        `${API}/api/v1/cases/${caseId}/anomalies?${params}`,
         { headers: authHeaders() }
       );
       if (!res.ok) throw new Error('Failed to fetch anomalies');
       return res.json();
+    },
+    placeholderData: (previousData) => previousData,
+    staleTime: 30_000,
+  });
+}
+
+export function useMarkReviewed(caseId: string, docId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ anomalyId, reviewed }: { anomalyId: string; reviewed: boolean }) => {
+      const res = await fetch(
+        `${API}/api/v1/cases/${caseId}/anomalies/${anomalyId}/review`,
+        {
+          method: 'PATCH',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reviewed }),
+        }
+      );
+      if (!res.ok) throw new Error('Failed to mark reviewed');
+      return res.json();
+    },
+    onMutate: async ({ anomalyId, reviewed }) => {
+      await queryClient.cancelQueries({ queryKey: ['anomalies', caseId, docId] });
+      const previous = queryClient.getQueriesData<{ items: Anomaly[] }>({
+        queryKey: ['anomalies', caseId, docId],
+      });
+      const filters: Array<{ severity?: string; reviewed?: boolean } | undefined> = [
+        undefined,
+        { severity: 'high' },
+        { severity: 'medium' },
+        { severity: 'low' },
+        { reviewed: false },
+      ];
+      for (const filter of filters) {
+        queryClient.setQueryData<{ items: Anomaly[] }>(
+          ['anomalies', caseId, docId, filter],
+          (old) => {
+            if (!old) return old;
+            const updated = old.items.map((a: Anomaly) =>
+              a.id === anomalyId ? { ...a, reviewed } : a
+            );
+            if (!filter) return { items: updated };
+            return {
+              items: updated.filter((a: Anomaly) => {
+                if (filter.severity) return a.severity === filter.severity;
+                if (filter.reviewed !== undefined) return a.reviewed === filter.reviewed;
+                return true;
+              }),
+            };
+          }
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        for (const [key, data] of context.previous) {
+          queryClient.setQueryData(key, data);
+        }
+      }
     },
   });
 }

@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useToast } from '@/lib/toast-context';
 
 interface Case {
   id: string;
@@ -11,12 +13,16 @@ interface Case {
 }
 
 export default function CasesPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { showToast } = useToast();
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Case | null>(null);
 
   const fetchCases = async () => {
     try {
@@ -39,6 +45,75 @@ export default function CasesPage() {
     fetchCases();
   }, []);
 
+  useEffect(() => {
+    if (searchParams.get('new') === 'true') {
+      setShowCreate(true);
+      router.replace('/cases');
+    }
+  }, [searchParams, router]);
+
+  const handleDeleteRetry = useCallback(async (target: Case) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch(`http://localhost:8000/api/v1/cases/${target.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 0 || res.ok || res.status === 404) {
+        setCases((prev) => prev.filter((c) => c.id !== target.id));
+      } else {
+        throw new Error(`Failed: ${res.status}`);
+      }
+    } catch {
+      setCases((prev) => {
+        if (prev.some((c) => c.id === target.id)) return prev;
+        return [...prev, target];
+      });
+      showToast({
+        message: 'Failed to delete the case.',
+        type: 'error',
+        onRetry: () => handleDeleteRetry(target),
+        onNavigate: () => router.push('/cases'),
+        navigateLabel: 'Go to Cases',
+      });
+    }
+  }, [showToast, router]);
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+
+    const target = deleteTarget;
+    const index = cases.findIndex((c) => c.id === target.id);
+    const snapshot = { item: target, index };
+
+    setCases((prev) => prev.filter((c) => c.id !== target.id));
+    setDeleteTarget(null);
+
+    const token = localStorage.getItem('access_token');
+    fetch(`http://localhost:8000/api/v1/cases/${target.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((res) => {
+      if (res.status === 0 || res.ok || res.status === 404) return;
+      throw new Error(`Failed: ${res.status}`);
+    }).catch((err) => {
+      console.error('Delete failed:', err);
+      setCases((prev) => {
+        if (prev.some((c) => c.id === target.id)) return prev;
+        const copy = [...prev];
+        copy.splice(snapshot.index, 0, snapshot.item);
+        return copy;
+      });
+      showToast({
+        message: 'Failed to delete the case.',
+        type: 'error',
+        onRetry: () => handleDeleteRetry(target),
+        onNavigate: () => router.push('/cases'),
+        navigateLabel: 'Go to Cases',
+      });
+    });
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
@@ -55,7 +130,10 @@ export default function CasesPage() {
         body: JSON.stringify({ title: newTitle }),
       });
 
-      if (!res.ok) throw new Error('Failed to create case');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Failed to create case' }));
+        throw new Error(err.detail || 'Failed to create case');
+      }
 
       const newCase = await res.json();
       setCases([{ ...newCase, status: 'active', created_at: new Date().toISOString() }, ...cases]);
@@ -115,7 +193,7 @@ export default function CasesPage() {
             <span className="seg-current">Cases</span>
           </div>
           <div className="topbar-actions">
-            <Link href="/login" className="btn btn-ghost btn-sm">Sign out</Link>
+            <Link href="/login" className="btn btn-ghost btn-sm" onClick={() => localStorage.removeItem('access_token')}>Sign out</Link>
           </div>
         </div>
 
@@ -204,12 +282,50 @@ export default function CasesPage() {
                       <td><span className={`pill ${c.status === 'active' ? 'processing' : 'done'}`}>{c.status}</span></td>
                       <td>{new Date(c.created_at).toLocaleDateString()}</td>
                       <td>
-                        <Link href={`/cases/${c.id}`} className="btn btn-ghost btn-sm">View</Link>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <Link href={`/cases/${c.id}`} className="btn btn-ghost btn-sm">View</Link>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ color: 'var(--flag)' }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setDeleteTarget(c);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+          {/* Delete Case Modal */}
+          {deleteTarget && (
+            <div className="modal-backdrop" onClick={() => setDeleteTarget(null)}>
+              <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+                <h3>Delete case</h3>
+                <p>
+                  Delete <strong>{deleteTarget.title}</strong> and all its documents?
+                  This cannot be undone.
+                </p>
+                <div className="modal-actions">
+                  <button
+                    onClick={() => setDeleteTarget(null)}
+                    className="btn btn-ghost"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    className="btn btn-danger"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -1,17 +1,22 @@
 import base64
 import json
+import logging
 import uuid
 from datetime import datetime
 from typing import Annotated
 
+import redis
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.v1.deps import get_current_user
+from cache.llm_cache import _redis
 from db.session import get_session
-from models import Case, User
+from models import Anomaly, Case, Clause, Document, User
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -37,7 +42,15 @@ async def create_case(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, str]:
-    case = Case(firm_id=user.firm_id, title=payload.title)
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="title cannot be empty")
+    existing = await session.execute(
+        select(Case).where(Case.firm_id == user.firm_id, Case.title == title)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="a case with this title already exists")
+    case = Case(firm_id=user.firm_id, title=title)
     session.add(case)
     await session.commit()
     return {"id": str(case.id), "title": case.title}
@@ -130,8 +143,39 @@ async def delete_case(
     case_id: str,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> dict[str, str]:
+) -> dict[str, object]:
     case = await _get_owned_case(case_id, user, session)
-    await session.delete(case)
+    case_uuid = case.id
+    doc_result = await session.execute(
+        select(Document.id).where(Document.case_id == case_uuid)
+    )
+    doc_ids = [row[0] for row in doc_result.all()]
+    deleted_keys = 0
+    try:
+        keys_to_delete = list(_redis.scan_iter("llm:*"))
+        if keys_to_delete:
+            pipe = _redis.pipeline()
+            for key in keys_to_delete:
+                pipe.delete(key)
+            deleted_keys = sum(pipe.execute())
+    except redis.RedisError:
+        logger.warning("failed to clean redis cache")
+    if doc_ids:
+        clause_result = await session.execute(
+            select(Clause.id).where(Clause.document_id.in_(doc_ids))
+        )
+        clause_ids = [row[0] for row in clause_result.all()]
+        if clause_ids:
+            await session.execute(
+                delete(Anomaly).where(Anomaly.clause_id.in_(clause_ids))
+            )
+            await session.execute(
+                delete(Clause).where(Clause.document_id.in_(doc_ids))
+            )
+        await session.execute(
+            delete(Document).where(Document.id.in_(doc_ids))
+        )
+    await session.execute(delete(Case).where(Case.id == case_uuid))
     await session.commit()
-    return {"deleted": str(case.id)}
+    logger.info("deleted case %s with %d documents and %d cache keys", case_id, len(doc_ids), deleted_keys)
+    return {"deleted": case_id, "documents_deleted": str(len(doc_ids)), "cache_keys_deleted": str(deleted_keys)}

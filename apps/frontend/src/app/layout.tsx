@@ -3,6 +3,9 @@ import type { ReactNode } from "react";
 import { Newsreader, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import QueryProvider from "@/lib/query-provider";
+import { ToastProvider } from "@/lib/toast-context";
+import ToastContainer from "@/components/Toast";
+import AuthGuard from "@/components/AuthGuard";
 
 const newsreader = Newsreader({
   variable: "--font-newsreader",
@@ -43,7 +46,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
       </head>
       <body>
-        <QueryProvider>{children}</QueryProvider>
+        <QueryProvider>
+          <ToastProvider>
+            <AuthGuard>
+              {children}
+            </AuthGuard>
+            <ToastContainer />
+          </ToastProvider>
+        </QueryProvider>
       </body>
     </html>
   );

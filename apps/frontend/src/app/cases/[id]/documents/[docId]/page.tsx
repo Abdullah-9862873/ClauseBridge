@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { useDocument, useClauses, useAnomalies, getPdfUrl } from '@/lib/hooks';
+import { useQueryClient } from '@tanstack/react-query';
+import { useDocument, useClauses, useAnomalies, useMarkReviewed, getPdfUrl } from '@/lib/hooks';
 import type { Anomaly } from '@/lib/hooks';
 
 const ReactPDF = dynamic(() => import('react-pdf').then(mod => mod.Document), { ssr: false });
@@ -33,6 +34,7 @@ export default function DocumentDetailPage() {
   const [selectedClause, setSelectedClause] = useState<string | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [anomalyFilter, setAnomalyFilter] = useState<string>('all');
 
   useEffect(() => {
     import('react-pdf').then(({ pdfjs }) => {
@@ -42,9 +44,51 @@ export default function DocumentDetailPage() {
 
   const { data: document, isLoading: docLoading } = useDocument(caseId, docId);
   const { data: clauseData, isLoading: clauseLoading } = useClauses(caseId, docId);
-  const { data: anomalyData } = useAnomalies(caseId, docId);
+  const { data: allAnomalyData } = useAnomalies(caseId, docId, undefined);
+
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!allAnomalyData || allAnomalyData.items.length === 0) return;
+    const filters = [
+      { severity: 'high' },
+      { severity: 'medium' },
+      { severity: 'low' },
+      { reviewed: false },
+    ];
+    for (const f of filters) {
+      queryClient.prefetchQuery({
+        queryKey: ['anomalies', caseId, docId, f],
+        queryFn: async () => {
+          const params = new URLSearchParams({ document_id: docId, limit: '100' });
+          if (f.severity) params.set('severity', f.severity);
+          if (f.reviewed !== undefined) params.set('reviewed', String(f.reviewed));
+          const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+          const res = await fetch(
+            `http://localhost:8000/api/v1/cases/${caseId}/anomalies?${params}`,
+            { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+          );
+          if (!res.ok) throw new Error('Failed to fetch anomalies');
+          return res.json();
+        },
+        staleTime: 60_000,
+      });
+    }
+  }, [allAnomalyData, caseId, docId, queryClient]);
+  const anomalyFilters = anomalyFilter === 'unreviewed'
+    ? { reviewed: false }
+    : anomalyFilter !== 'all'
+      ? { severity: anomalyFilter }
+      : undefined;
+  const { data: anomalyData, isFetching: anomaliesLoading } = useAnomalies(
+    caseId,
+    docId,
+    anomalyFilter === 'all' ? undefined : anomalyFilters
+  );
+  const markReviewed = useMarkReviewed(caseId, docId);
   const clauses = clauseData?.items || [];
   const anomalies = anomalyData?.items || [];
+  const totalAnomalyCount = allAnomalyData?.items?.length ?? 0;
+  const hasAnomalies = totalAnomalyCount > 0;
 
   const anomalyByClauseId = new Map<string, Anomaly>();
   for (const a of anomalies) {
@@ -53,6 +97,14 @@ export default function DocumentDetailPage() {
 
   const status = document?.status || '';
   const isProcessing = status === 'queued' || status === 'processing';
+
+  const displayedClauses = clauseLoading ? [] : clauses.filter((clause) => {
+    const anomaly = anomalyByClauseId.get(clause.id);
+    if (!anomaly) return false;
+    if (anomalyFilter === 'all') return true;
+    if (anomalyFilter === 'unreviewed') return !anomaly.reviewed;
+    return anomaly.severity === anomalyFilter;
+  });
 
   return (
     <div className="app-layout">
@@ -117,7 +169,7 @@ export default function DocumentDetailPage() {
                 {document?.document_type ? `${document.document_type}` : 'Awaiting classification'}
                 {document?.classification_confidence ? ` (${(parseFloat(document.classification_confidence) * 100).toFixed(0)}% confidence)` : ''}
                 {clauses.length > 0 ? ` \u00B7 ${clauses.length} clause${clauses.length !== 1 ? 's' : ''} found` : ''}
-                {anomalies.length > 0 ? ` \u00B7 ${anomalies.length} anomal${anomalies.length !== 1 ? 'ies' : 'y'}` : ''}
+                {totalAnomalyCount > 0 ? ` \u00B7 ${totalAnomalyCount} anomal${totalAnomalyCount !== 1 ? 'ies' : 'y'}` : ''}
               </p>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -213,6 +265,23 @@ export default function DocumentDetailPage() {
                 </p>
               </div>
 
+              {hasAnomalies && (
+                <div className="filter-row">
+                  {['all', 'high', 'medium', 'low', 'unreviewed'].map((f) => (
+                    <button
+                      key={f}
+                      className={`chip ${anomalyFilter === f ? 'active' : ''}`}
+                      onClick={() => setAnomalyFilter(f)}
+                    >
+                      {f === 'all' ? 'All' : f === 'unreviewed' ? 'Unreviewed' : f.charAt(0).toUpperCase() + f.slice(1)}
+                    </button>
+                  ))}
+                  {anomaliesLoading && (
+                    <span style={{ fontSize: '12px', color: 'var(--ink-50)', marginLeft: '4px' }}>Loading...</span>
+                  )}
+                </div>
+              )}
+
               {clauseLoading ? (
                 <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--ink-50)', fontSize: '13px' }}>
                   Loading clauses...
@@ -221,38 +290,76 @@ export default function DocumentDetailPage() {
                 <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--ink-50)', fontSize: '13px' }}>
                   {status === 'done' ? 'No clauses extracted' : 'Clauses will appear after processing'}
                 </div>
+              ) : displayedClauses.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--ink-50)', fontSize: '13px' }}>
+                  No anomalies matching this filter
+                </div>
               ) : (
-                clauses.map((clause) => {
+                displayedClauses.map((clause) => {
                   const anomaly = anomalyByClauseId.get(clause.id);
+                  const isReviewed = anomaly?.reviewed ?? false;
                   return (
                     <div
                       key={clause.id}
                       onClick={() => setSelectedClause(selectedClause === clause.id ? null : clause.id)}
-                      className={`clause-card ${selectedClause === clause.id ? 'active' : ''}`}
+                      className={`clause-card ${selectedClause === clause.id ? 'active' : ''} ${isReviewed ? 'reviewed' : ''}`}
+                      style={isReviewed ? { opacity: 0.6 } : {}}
                     >
-                      <span className="ctype">
-                        {clause.clause_type}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                        <span className="ctype">
+                          {clause.clause_type}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {anomaly && (
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                padding: '2px 7px',
+                                borderRadius: '10px',
+                                color: '#fff',
+                                background: anomaly.severity === 'high' ? 'var(--flag)' : anomaly.severity === 'medium' ? 'var(--brass)' : 'var(--ok)',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.3px',
+                              }}
+                            >
+                              {anomaly.severity}
+                            </span>
+                          )}
+                          {anomaly && (
+                            <label
+                              className="checkbox"
+                              title={isReviewed ? 'Mark as unreviewed' : 'Mark as reviewed'}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isReviewed}
+                                onChange={() => markReviewed.mutate({ anomalyId: anomaly.id, reviewed: !isReviewed })}
+                                className="checkbox"
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
                       <p className="csnip" style={selectedClause === clause.id ? {} : { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                         {clause.clause_text}
                       </p>
-                      <div className="cfoot">
-                        {anomaly ? (
+                      {anomaly && (
+                        <div className="cfoot">
                           <span className={SEVERITY_SEV[anomaly.severity] || 'sev low'}>
                             {anomaly.severity} anomaly
                           </span>
-                        ) : (
-                          <span className="sev low">Within pattern</span>
-                        )}
-                        <div className="conf">
-                          <div className="conf-bar">
-                            <span style={{ width: anomaly ? `${anomaly.confidence * 100}%` : '90%' }} />
+                          <div className="conf">
+                            <div className="conf-bar">
+                              <span style={{ width: `${anomaly.confidence * 100}%` }} />
+                            </div>
+                            <span className="num mono">
+                              {anomaly.confidence.toFixed(2)}
+                            </span>
                           </div>
-                          <span className="num mono">
-                            {anomaly ? anomaly.confidence.toFixed(2) : '0.90'}
-                          </span>
                         </div>
-                      </div>
+                      )}
                       {anomaly && selectedClause === clause.id && (
                         <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--line)' }}>
                           <div style={{ fontSize: '12px', color: 'var(--flag)', fontWeight: 500, marginBottom: '4px' }}>

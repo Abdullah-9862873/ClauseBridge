@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAnomalies } from '@/lib/hooks';
+import { useToast } from '@/lib/toast-context';
 
 const API = 'http://localhost:8000';
 
@@ -35,12 +37,31 @@ const STATUS_PILL: Record<string, string> = {
   error: 'error',
 };
 
+function AnomalyBadge({ caseId, docId }: { caseId: string; docId: string }) {
+  const { data } = useAnomalies(caseId, docId);
+  const count = data?.items?.length ?? 0;
+  if (count === 0) return null;
+  return (
+    <span style={{
+      fontSize: '11px', fontWeight: 600, padding: '2px 8px',
+      borderRadius: '10px', color: '#fff', background: 'var(--flag)',
+      marginLeft: '8px',
+    }}>
+      {count} anomal{count !== 1 ? 'ies' : 'y'}
+    </span>
+  );
+}
+
 export default function CaseDetailPage() {
   const params = useParams();
   const caseId = params.id as string;
+  const router = useRouter();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
+  const [localDocuments, setLocalDocuments] = useState<Document[] | null>(null);
 
   const { data: caseDetail } = useQuery<CaseDetail>({
     queryKey: ['case', caseId],
@@ -65,7 +86,78 @@ export default function CaseDetailPage() {
     },
   });
 
-  const documents = docData?.items || [];
+  const documents = localDocuments ?? docData?.items ?? [];
+
+  const handleDeleteDocRetry = useCallback(async (target: Document) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch(`${API}/api/v1/cases/${caseId}/documents/${target.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 0 || res.ok || res.status === 404) {
+        setLocalDocuments((prev) => (prev ?? []).filter((d) => d.id !== target.id));
+        queryClient.invalidateQueries({ queryKey: ['documents', caseId] });
+        queryClient.invalidateQueries({ queryKey: ['stats'] });
+      } else {
+        throw new Error(`Failed: ${res.status}`);
+      }
+    } catch {
+      setLocalDocuments((prev) => {
+        const current = prev ?? docData?.items ?? [];
+        if (current.some((d) => d.id === target.id)) return current;
+        return [...current, target];
+      });
+      showToast({
+        message: 'Failed to delete the document.',
+        type: 'error',
+        onRetry: () => handleDeleteDocRetry(target),
+        onNavigate: () => router.push(`/cases/${caseId}`),
+        navigateLabel: 'Go to Case',
+      });
+    }
+  }, [caseId, queryClient, showToast, router, docData]);
+
+  const handleDeleteDoc = () => {
+    if (!deleteTarget) return;
+
+    const target = deleteTarget;
+    const currentDocs = localDocuments ?? docData?.items ?? [];
+    const index = currentDocs.findIndex((d) => d.id === target.id);
+    const snapshot = { item: target, index };
+
+    setLocalDocuments(currentDocs.filter((d) => d.id !== target.id));
+    setDeleteTarget(null);
+
+    const token = localStorage.getItem('access_token');
+    fetch(`${API}/api/v1/cases/${caseId}/documents/${target.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((res) => {
+      if (res.status === 0 || res.ok || res.status === 404) {
+        queryClient.invalidateQueries({ queryKey: ['documents', caseId] });
+        queryClient.invalidateQueries({ queryKey: ['stats'] });
+      } else {
+        throw new Error(`Failed: ${res.status}`);
+      }
+    }).catch((err) => {
+      console.error('Delete document failed:', err);
+      setLocalDocuments((prev) => {
+        const current = prev ?? docData?.items ?? [];
+        if (current.some((d) => d.id === target.id)) return current;
+        const copy = [...current];
+        copy.splice(snapshot.index, 0, snapshot.item);
+        return copy;
+      });
+      showToast({
+        message: 'Failed to delete the document.',
+        type: 'error',
+        onRetry: () => handleDeleteDocRetry(target),
+        onNavigate: () => router.push(`/cases/${caseId}`),
+        navigateLabel: 'Go to Case',
+      });
+    });
+  };
 
   const handleUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,6 +196,7 @@ export default function CaseDetailPage() {
           throw new Error(err.detail || 'Failed to upload');
         }
 
+        setLocalDocuments(null);
         queryClient.invalidateQueries({ queryKey: ['documents', caseId] });
         e.target.value = '';
       } catch (err: unknown) {
@@ -164,7 +257,7 @@ export default function CaseDetailPage() {
             <span className="seg-current">{caseDetail?.title || 'Case'}</span>
           </div>
           <div className="topbar-actions">
-            <Link href="/login" className="btn btn-ghost btn-sm">Sign out</Link>
+            <Link href="/login" className="btn btn-ghost btn-sm" onClick={() => localStorage.removeItem('access_token')}>Sign out</Link>
           </div>
         </div>
 
@@ -227,7 +320,10 @@ export default function CaseDetailPage() {
                   {documents.map((doc) => (
                     <tr key={doc.id}>
                       <td>
-                        <div className="cell-primary">{doc.filename || 'Document'}</div>
+                        <div className="cell-primary" style={{ display: 'flex', alignItems: 'center' }}>
+                          {doc.filename || 'Document'}
+                          {doc.status === 'done' && <AnomalyBadge caseId={caseId} docId={doc.id} />}
+                        </div>
                       </td>
                       <td>{doc.document_type || 'Awaiting classification'}</td>
                       <td>
@@ -236,11 +332,20 @@ export default function CaseDetailPage() {
                         </span>
                       </td>
                       <td>
-                        {doc.status === 'done' ? (
-                          <Link href={`/cases/${caseId}/documents/${doc.id}`} className="btn btn-ghost btn-sm">View</Link>
-                        ) : (
-                          <span className="btn btn-ghost btn-sm" style={{ opacity: 0.4, pointerEvents: 'none' }}>View</span>
-                        )}
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          {doc.status === 'done' ? (
+                            <Link href={`/cases/${caseId}/documents/${doc.id}`} className="btn btn-ghost btn-sm">View</Link>
+                          ) : (
+                            <span className="btn btn-ghost btn-sm" style={{ opacity: 0.4, pointerEvents: 'none' }}>View</span>
+                          )}
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ color: 'var(--flag)' }}
+                            onClick={() => setDeleteTarget(doc)}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -248,6 +353,33 @@ export default function CaseDetailPage() {
               </table>
             )}
           </div>
+
+          {/* Delete Document Modal */}
+          {deleteTarget && (
+            <div className="modal-backdrop" onClick={() => setDeleteTarget(null)}>
+              <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+                <h3>Delete document</h3>
+                <p>
+                  Delete <strong>{deleteTarget.filename}</strong>?
+                  All clauses and anomalies will be removed. This cannot be undone.
+                </p>
+                <div className="modal-actions">
+                  <button
+                    onClick={() => setDeleteTarget(null)}
+                    className="btn btn-ghost"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteDoc}
+                    className="btn btn-danger"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

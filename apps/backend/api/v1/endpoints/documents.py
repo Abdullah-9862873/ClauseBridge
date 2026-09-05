@@ -3,17 +3,19 @@ import logging
 import uuid
 from typing import Annotated
 
+import redis
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.v1.deps import get_current_user
 from api.v1.endpoints.cases import _get_owned_case
+from cache.llm_cache import _redis
 from core.security import decode_token
 from db.session import get_session
-from models import Document, User
+from models import Anomaly, Clause, Document, User
 from storage.s3_client import download_object, upload_file_to_storage
 from workers.tasks import ingest_document
 
@@ -166,3 +168,42 @@ async def get_document_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{doc.filename}"'},
     )
+
+
+@router.delete("/{case_id}/documents/{document_id}")
+async def delete_document(
+    case_id: str,
+    document_id: str,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, str]:
+    await _get_owned_case(case_id, user, session)
+    doc_uuid = uuid.UUID(document_id)
+    doc = await session.get(Document, doc_uuid)
+    if doc is None or str(doc.case_id) != case_id:
+        raise HTTPException(status_code=404, detail="document not found")
+    deleted_keys = 0
+    try:
+        keys_to_delete = list(_redis.scan_iter("llm:*"))
+        if keys_to_delete:
+            pipe = _redis.pipeline()
+            for key in keys_to_delete:
+                pipe.delete(key)
+            deleted_keys = sum(pipe.execute())
+    except redis.RedisError:
+        logger.warning("failed to clean redis cache")
+    clause_result = await session.execute(
+        select(Clause.id).where(Clause.document_id == doc_uuid)
+    )
+    clause_ids = [row[0] for row in clause_result.all()]
+    if clause_ids:
+        await session.execute(
+            delete(Anomaly).where(Anomaly.clause_id.in_(clause_ids))
+        )
+        await session.execute(
+            delete(Clause).where(Clause.document_id == doc_uuid)
+        )
+    await session.execute(delete(Document).where(Document.id == doc_uuid))
+    await session.commit()
+    logger.info("deleted document %s and %d cache keys", document_id, deleted_keys)
+    return {"deleted": document_id, "cache_keys_deleted": str(deleted_keys)}

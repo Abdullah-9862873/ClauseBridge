@@ -30,6 +30,8 @@ async def list_anomalies(
     limit: int = Query(20, ge=1, le=100),
     cursor: str | None = Query(None),
     document_id: str | None = Query(None),
+    severity: str | None = Query(None),
+    reviewed: bool | None = Query(None),
 ) -> dict[str, object]:
     query = (
         select(Anomaly)
@@ -40,6 +42,10 @@ async def list_anomalies(
     )
     if document_id:
         query = query.where(Clause.document_id == uuid.UUID(document_id))
+    if severity:
+        query = query.where(Anomaly.severity == severity)
+    if reviewed is not None:
+        query = query.where(Anomaly.reviewed == reviewed)
     if cursor:
         anchor_time, anchor_id = _decode_cursor(cursor)
         query = query.where(

@@ -34,3 +34,25 @@ def set_cached(method: str, text: str, result: Any) -> None:
     key = _make_key(method, text)
     logger.info("setting cache key: %s (ttl=%s)", key, CACHE_TTL)
     _redis.setex(key, CACHE_TTL, json.dumps(result))
+
+
+def delete_document_cache(text: str) -> int:
+    """Delete all LLM cache entries for a document's text.
+    Returns the number of keys deleted.
+    """
+    deleted = 0
+    for method in ("classify", "extract"):
+        key = _make_key(method, text)
+        if _redis.delete(key):
+            deleted += 1
+            logger.info("deleted cache key: %s", key)
+    return deleted
+
+
+def delete_clause_cache(clause_text: str, standard_text: str) -> int:
+    """Delete anomaly cache entry for a specific clause."""
+    key = _make_key("anomaly", clause_text[:2000] + standard_text[:2000])
+    if _redis.delete(key):
+        logger.info("deleted anomaly cache key: %s", key)
+        return 1
+    return 0

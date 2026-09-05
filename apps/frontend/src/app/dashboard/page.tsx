@@ -51,7 +51,7 @@ export default function DashboardPage() {
             <span className="seg-current">Dashboard</span>
           </div>
           <div className="topbar-actions">
-            <Link href="/login" className="btn btn-ghost btn-sm">Sign out</Link>
+            <Link href="/login" className="btn btn-ghost btn-sm" onClick={() => localStorage.removeItem('access_token')}>Sign out</Link>
           </div>
         </div>
 
@@ -61,7 +61,7 @@ export default function DashboardPage() {
               <h2>Dashboard</h2>
               <p className="sub">Overview of your legal document analysis</p>
             </div>
-            <Link href="/cases" className="btn btn-primary" style={{ width: 'auto', marginTop: 0 }}>New case</Link>
+            <Link href="/cases?new=true" className="btn btn-primary" style={{ width: 'auto', marginTop: 0 }}>New case</Link>
           </div>
 
           <div className="stats-grid">
@@ -85,7 +85,7 @@ export default function DashboardPage() {
             </div>
             <div style={{ padding: '16px 20px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
               <Link href="/cases" className="btn btn-ghost btn-sm">View cases</Link>
-              <Link href="/cases" className="btn btn-ghost btn-sm">New case</Link>
+              <Link href="/cases?new=true" className="btn btn-ghost btn-sm">New case</Link>
             </div>
           </div>
         </div>

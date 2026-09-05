@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 const API = 'http://localhost:8000';
 
@@ -28,11 +28,11 @@ interface CaseDetail {
   created_at: string;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  done: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  processing: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-  queued: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
-  error: 'bg-red-500/10 text-red-400 border-red-500/20',
+const STATUS_PILL: Record<string, string> = {
+  done: 'done',
+  processing: 'processing',
+  queued: 'queued',
+  error: 'error',
 };
 
 export default function CaseDetailPage() {
@@ -116,132 +116,140 @@ export default function CaseDetailPage() {
   );
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      {/* Sidebar */}
-      <aside className="w-64 bg-slate-900/50 border-r border-slate-700/50 flex flex-col">
-        <div className="p-5 border-b border-slate-700/50">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <span className="text-lg font-bold text-white tracking-tight">ClauseBridge</span>
+    <div className="app-layout">
+      <aside className="sidebar">
+        <div className="sidebar-logo">
+          <svg width="20" height="20" viewBox="0 0 26 26" fill="none">
+            <path d="M4 21V6.5C4 5.12 5.12 4 6.5 4H15L22 11V19.5C22 20.88 20.88 22 19.5 22H6.5C5.12 22 4 20.88 4 19.5Z" stroke="#F7F6F1" strokeWidth="1.4"/>
+            <path d="M15 4V9.5C15 10.33 15.67 11 16.5 11H22" stroke="#F7F6F1" strokeWidth="1.4"/>
+            <line x1="8" y1="14.5" x2="17.5" y2="14.5" stroke="#B23B2E" strokeWidth="1.4"/>
+            <line x1="8" y1="17.6" x2="14" y2="17.6" stroke="#F7F6F1" strokeWidth="1.4"/>
+          </svg>
+          Clausebridge
+        </div>
+        <nav className="sidebar-nav">
+          <Link href="/dashboard" className="nav-item">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+              <rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+              <rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+              <rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+            </svg>
+            Dashboard
+          </Link>
+          <Link href="/cases" className="nav-item active">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M2 4.5C2 3.67 2.67 3 3.5 3H6.5L8 4.5H12.5C13.33 4.5 14 5.17 14 6V11.5C14 12.33 13.33 13 12.5 13H3.5C2.67 13 2 12.33 2 11.5V4.5Z" stroke="currentColor" strokeWidth="1.3"/>
+            </svg>
+            Cases
+          </Link>
+        </nav>
+        <div className="sidebar-spacer" />
+        <div className="user-chip">
+          <div className="avatar">U</div>
+          <div>
+            <div className="name">User</div>
+            <div className="role">Member</div>
           </div>
         </div>
-        <nav className="flex-1 p-3">
-          <ul className="space-y-1">
-            <li>
-              <Link href="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
-                Dashboard
-              </Link>
-            </li>
-            <li>
-              <Link href="/cases" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-blue-600/10 text-blue-400 border border-blue-500/20">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                Cases
-              </Link>
-            </li>
-          </ul>
-        </nav>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 p-8 overflow-auto">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-slate-500 mb-6">
-          <Link href="/cases" className="hover:text-slate-300 transition-colors">Cases</Link>
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-          <span className="text-slate-300">{caseDetail?.title || 'Loading...'}</span>
+      <div className="main-content">
+        <div className="topbar">
+          <div className="breadcrumb">
+            <Link href="/dashboard" style={{ color: 'var(--ink-50)' }}>Dashboard</Link>
+            <span style={{ color: 'var(--ink-35)' }}>/</span>
+            <Link href="/cases" style={{ color: 'var(--ink-50)' }}>Cases</Link>
+            <span style={{ color: 'var(--ink-35)' }}>/</span>
+            <span className="seg-current">{caseDetail?.title || 'Case'}</span>
+          </div>
+          <div className="topbar-actions">
+            <Link href="/login" className="btn btn-ghost btn-sm">Sign out</Link>
+          </div>
         </div>
 
-        {/* Header */}
-        <header className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">{caseDetail?.title || 'Case'}</h1>
-            <p className="text-slate-400 mt-1">
-              {documents.length} document{documents.length !== 1 ? 's' : ''} uploaded
-            </p>
-          </div>
-          <label className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium rounded-xl transition-all duration-200 shadow-lg shadow-blue-500/25 cursor-pointer">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            {uploading ? 'Uploading...' : 'Upload PDF'}
-            <input
-              type="file"
-              accept=".pdf"
-              onChange={handleUpload}
-              disabled={uploading}
-              className="hidden"
-            />
-          </label>
-        </header>
-
-        {uploadError && (
-          <div className="mb-6 flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2.5">
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-            {uploadError}
-          </div>
-        )}
-
-        {/* Documents List */}
-        {documents.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700/50 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <p className="text-slate-400 mb-2">No documents uploaded yet</p>
-            <p className="text-slate-500 text-sm">Upload a PDF to start analysis</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {documents.map((doc) => (
-              <Link
-                key={doc.id}
-                href={`/cases/${caseId}/documents/${doc.id}`}
-                className="block bg-slate-800/50 border border-slate-700/50 rounded-xl p-5 hover:border-slate-600/50 hover:bg-slate-800/80 transition-all group"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
-                      <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 className="text-white font-medium group-hover:text-blue-400 transition-colors">{doc.filename || 'Document'}</h3>
-                      <p className="text-slate-500 text-sm mt-0.5">
-                        {doc.document_type ? `Type: ${doc.document_type}` : 'Awaiting classification'}
-                        {doc.classification_confidence ? ` (${(doc.classification_confidence * 100).toFixed(0)}% confidence)` : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`px-2.5 py-1 text-xs font-medium rounded-full border ${STATUS_COLORS[doc.status] || STATUS_COLORS.queued}`}>
-                      {doc.status}
-                    </span>
-                    <svg className="w-4 h-4 text-slate-500 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
+        <div className="screen">
+          <div className="page-head">
+            <div>
+              <h2>{caseDetail?.title || 'Case'}</h2>
+              <div className="case-meta">
+                <div className="item">
+                  <span>Documents</span>
+                  {documents.length}
                 </div>
-              </Link>
-            ))}
+              </div>
+            </div>
+            <label className="btn btn-primary" style={{ width: 'auto', marginTop: 0, cursor: 'pointer' }}>
+              {uploading ? 'Uploading...' : 'Upload PDF'}
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={handleUpload}
+                disabled={uploading}
+                style={{ display: 'none' }}
+              />
+            </label>
           </div>
-        )}
-      </main>
+
+          {uploadError && (
+            <div style={{
+              padding: '10px 13px', background: 'var(--flag-bg)',
+              border: '1px solid var(--flag-line)', borderRadius: 'var(--radius)',
+              fontSize: '13px', color: 'var(--flag)', marginBottom: '20px',
+            }}>
+              {uploadError}
+            </div>
+          )}
+
+          <div className="dropzone">
+            <strong>Drop files to add to this case</strong> &mdash; or click &ldquo;Upload PDF&rdquo; above. PDF files up to 10MB.
+          </div>
+
+          <div className="card">
+            <div className="card-head">
+              <h3>Documents</h3>
+            </div>
+            {documents.length === 0 ? (
+              <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--ink-50)', fontSize: '13.5px' }}>
+                No documents uploaded yet. Upload a PDF to start analysis.
+              </div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>File</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {documents.map((doc) => (
+                    <tr key={doc.id}>
+                      <td>
+                        <div className="cell-primary">{doc.filename || 'Document'}</div>
+                      </td>
+                      <td>{doc.document_type || 'Awaiting classification'}</td>
+                      <td>
+                        <span className={`pill ${STATUS_PILL[doc.status] || 'queued'}`}>
+                          {doc.status}
+                        </span>
+                      </td>
+                      <td>
+                        {doc.status === 'done' ? (
+                          <Link href={`/cases/${caseId}/documents/${doc.id}`} className="btn btn-ghost btn-sm">View</Link>
+                        ) : (
+                          <span className="btn btn-ghost btn-sm" style={{ opacity: 0.4, pointerEvents: 'none' }}>View</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

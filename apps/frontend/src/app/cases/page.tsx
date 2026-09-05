@@ -69,156 +69,151 @@ export default function CasesPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      {/* Sidebar */}
-      <aside className="w-64 bg-slate-900/50 border-r border-slate-700/50 flex flex-col">
-        <div className="p-5 border-b border-slate-700/50">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <span className="text-lg font-bold text-white tracking-tight">ClauseBridge</span>
-          </div>
+    <div className="app-layout">
+      <aside className="sidebar">
+        <div className="sidebar-logo">
+          <svg width="20" height="20" viewBox="0 0 26 26" fill="none">
+            <path d="M4 21V6.5C4 5.12 5.12 4 6.5 4H15L22 11V19.5C22 20.88 20.88 22 19.5 22H6.5C5.12 22 4 20.88 4 19.5Z" stroke="#F7F6F1" strokeWidth="1.4"/>
+            <path d="M15 4V9.5C15 10.33 15.67 11 16.5 11H22" stroke="#F7F6F1" strokeWidth="1.4"/>
+            <line x1="8" y1="14.5" x2="17.5" y2="14.5" stroke="#B23B2E" strokeWidth="1.4"/>
+            <line x1="8" y1="17.6" x2="14" y2="17.6" stroke="#F7F6F1" strokeWidth="1.4"/>
+          </svg>
+          Clausebridge
         </div>
-        <nav className="flex-1 p-3">
-          <ul className="space-y-1">
-            <li>
-              <Link href="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
-                Dashboard
-              </Link>
-            </li>
-            <li>
-              <Link href="/cases" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-blue-600/10 text-blue-400 border border-blue-500/20">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                Cases
-              </Link>
-            </li>
-          </ul>
-        </nav>
-        <div className="p-3 border-t border-slate-700/50">
-          <Link href="/login" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        <nav className="sidebar-nav">
+          <Link href="/dashboard" className="nav-item">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+              <rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+              <rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+              <rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.3"/>
             </svg>
-            Logout
+            Dashboard
           </Link>
+          <Link href="/cases" className="nav-item active">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M2 4.5C2 3.67 2.67 3 3.5 3H6.5L8 4.5H12.5C13.33 4.5 14 5.17 14 6V11.5C14 12.33 13.33 13 12.5 13H3.5C2.67 13 2 12.33 2 11.5V4.5Z" stroke="currentColor" strokeWidth="1.3"/>
+            </svg>
+            Cases
+          </Link>
+        </nav>
+        <div className="sidebar-spacer" />
+        <div className="user-chip">
+          <div className="avatar">U</div>
+          <div>
+            <div className="name">User</div>
+            <div className="role">Member</div>
+          </div>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 p-8 overflow-auto">
-        <header className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Cases</h1>
-            <p className="text-slate-400 mt-1">Manage your legal document cases</p>
+      <div className="main-content">
+        <div className="topbar">
+          <div className="breadcrumb">
+            <Link href="/dashboard" style={{ color: 'var(--ink-50)' }}>Dashboard</Link>
+            <span style={{ color: 'var(--ink-35)' }}>/</span>
+            <span className="seg-current">Cases</span>
           </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium rounded-xl transition-all duration-200 shadow-lg shadow-blue-500/25"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            New Case
-          </button>
-        </header>
+          <div className="topbar-actions">
+            <Link href="/login" className="btn btn-ghost btn-sm">Sign out</Link>
+          </div>
+        </div>
 
-        {/* Create Case Modal */}
-        {showCreate && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-slate-800 border border-slate-700/50 rounded-2xl shadow-2xl p-6 w-full max-w-md">
-              <h2 className="text-xl font-semibold text-white mb-4">Create New Case</h2>
-              <form onSubmit={handleCreate} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider">Case Title</label>
-                  <input
-                    type="text"
-                    value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                    placeholder="e.g. Acme Corp Contract Review"
-                    className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                    required
-                  />
-                </div>
-                {error && <p className="text-sm text-red-400">{error}</p>}
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreate(false)}
-                    className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={creating}
-                    className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors disabled:opacity-50"
-                  >
-                    {creating ? 'Creating...' : 'Create'}
-                  </button>
-                </div>
-              </form>
+        <div className="screen">
+          <div className="page-head">
+            <div>
+              <h2>Cases</h2>
+              <p className="sub">Manage your legal document cases</p>
             </div>
-          </div>
-        )}
-
-        {/* Cases List */}
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <svg className="animate-spin w-8 h-8 text-blue-500" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
-          </div>
-        ) : cases.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700/50 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-            </div>
-            <p className="text-slate-400 mb-4">No cases yet</p>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="text-blue-400 hover:text-blue-300 text-sm font-medium"
-            >
-              Create your first case
+            <button onClick={() => setShowCreate(true)} className="btn btn-primary" style={{ width: 'auto', marginTop: 0 }}>
+              New case
             </button>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {cases.map((c) => (
-              <Link
-                key={c.id}
-                href={`/cases/${c.id}`}
-                className="block bg-slate-800/50 border border-slate-700/50 rounded-xl p-5 hover:border-slate-600/50 hover:bg-slate-800/80 transition-all group"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-white font-medium group-hover:text-blue-400 transition-colors">{c.title}</h3>
-                    <p className="text-slate-500 text-sm mt-1">Created {new Date(c.created_at).toLocaleDateString()}</p>
+
+          {/* Create Case Modal */}
+          {showCreate && (
+            <div style={{
+              position: 'fixed', inset: 0, background: 'rgba(22,33,44,0.4)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
+            }}>
+              <div style={{
+                background: 'var(--surface)', border: '1px solid var(--line)',
+                borderRadius: 'var(--radius)', padding: '24px', width: '100%', maxWidth: '400px',
+              }}>
+                <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Create new case</h3>
+                <form onSubmit={handleCreate}>
+                  <div className="field">
+                    <label htmlFor="caseTitle">Case title</label>
+                    <input
+                      id="caseTitle"
+                      type="text"
+                      value={newTitle}
+                      onChange={(e) => setNewTitle(e.target.value)}
+                      placeholder="e.g. Acme Corp Contract Review"
+                      required
+                    />
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="px-2.5 py-1 text-xs font-medium bg-blue-500/10 text-blue-400 rounded-full border border-blue-500/20">
-                      {c.status}
-                    </span>
-                    <svg className="w-4 h-4 text-slate-500 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
+                  {error && <p style={{ color: 'var(--flag)', fontSize: '13px', marginBottom: '12px' }}>{error}</p>}
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button type="button" onClick={() => setShowCreate(false)} className="btn btn-ghost" style={{ flex: 1 }}>
+                      Cancel
+                    </button>
+                    <button type="submit" disabled={creating} className="btn btn-primary" style={{ flex: 1 }}>
+                      {creating ? 'Creating...' : 'Create'}
+                    </button>
                   </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </main>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Cases List */}
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--ink-50)' }}>
+              Loading cases...
+            </div>
+          ) : cases.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--ink-50)' }}>
+              <p>No cases yet</p>
+              <button onClick={() => setShowCreate(true)} style={{
+                background: 'none', border: 'none', color: 'var(--brass)',
+                fontSize: '13px', marginTop: '8px', cursor: 'pointer', borderBottom: '1px solid var(--brass-line)',
+              }}>
+                Create your first case
+              </button>
+            </div>
+          ) : (
+            <div className="card">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Case</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cases.map((c) => (
+                    <tr key={c.id} className="row-link">
+                      <td>
+                        <Link href={`/cases/${c.id}`} style={{ display: 'block' }}>
+                          <div className="cell-primary">{c.title}</div>
+                        </Link>
+                      </td>
+                      <td><span className={`pill ${c.status === 'active' ? 'processing' : 'done'}`}>{c.status}</span></td>
+                      <td>{new Date(c.created_at).toLocaleDateString()}</td>
+                      <td>
+                        <Link href={`/cases/${c.id}`} className="btn btn-ghost btn-sm">View</Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

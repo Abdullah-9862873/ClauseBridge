@@ -1,17 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDocument, useClauses, useAnomalies, useMarkReviewed, getPdfUrl } from '@/lib/hooks';
 import type { Anomaly } from '@/lib/hooks';
-
-const ReactPDF = dynamic(() => import('react-pdf').then(mod => mod.Document), { ssr: false });
-const ReactPDFPage = dynamic(() => import('react-pdf').then(mod => mod.Page), { ssr: false });
-import 'react-pdf/dist/Page/AnnotationLayer.css';
-import 'react-pdf/dist/Page/TextLayer.css';
+import { PdfViewer, type PdfViewerHandle } from '@/components/PdfViewer';
 
 const SEVERITY_SEV: Record<string, string> = {
   high: 'sev high',
@@ -32,15 +27,10 @@ export default function DocumentDetailPage() {
   const docId = params.docId as string;
 
   const [selectedClause, setSelectedClause] = useState<string | null>(null);
-  const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [anomalyFilter, setAnomalyFilter] = useState<string>('all');
-
-  useEffect(() => {
-    import('react-pdf').then(({ pdfjs }) => {
-      pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-    });
-  }, []);
+  const [zoom, setZoom] = useState(1);
+  const pdfViewerRef = useRef<PdfViewerHandle>(null);
 
   const { data: document, isLoading: docLoading } = useDocument(caseId, docId);
   const { data: clauseData, isLoading: clauseLoading } = useClauses(caseId, docId);
@@ -180,80 +170,38 @@ export default function DocumentDetailPage() {
           <div className="viewer-grid">
             {/* Left: Document / PDF */}
             <div className="doc-page-wrap">
-              <div className="doc-page-bar">
-                <span>{numPages > 0 ? `Page ${currentPage} of ${numPages}` : 'Document'}</span>
-                <span>{isProcessing ? 'Processing...' : 'PDF'}</span>
-              </div>
-              <div className="doc-page">
-                {docLoading ? (
-                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--ink-50)' }}>
-                    Loading document...
+              {docLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--ink-50)' }}>
+                  Loading document...
+                </div>
+              ) : isProcessing ? (
+                <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                  <div style={{ color: 'var(--brass)', fontSize: '14px', fontWeight: 500, marginBottom: '6px' }}>
+                    {status === 'queued' ? 'In queue...' : 'Processing document...'}
                   </div>
-                ) : isProcessing ? (
-                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                    <div style={{ color: 'var(--brass)', fontSize: '14px', fontWeight: 500, marginBottom: '6px' }}>
-                      {status === 'queued' ? 'In queue...' : 'Processing document...'}
-                    </div>
-                    <div style={{ color: 'var(--ink-50)', fontSize: '13px' }}>
-                      Extracting text and analyzing clauses
-                    </div>
+                  <div style={{ color: 'var(--ink-50)', fontSize: '13px' }}>
+                    Extracting text and analyzing clauses
                   </div>
-                ) : status === 'done' ? (
-                  <>
-                    <ReactPDF
-                      file={getPdfUrl(caseId, docId)}
-                      onLoadSuccess={({ numPages: n }) => setNumPages(n)}
-                      loading={
-                        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--ink-50)' }}>
-                          Loading PDF...
-                        </div>
-                      }
-                      error={
-                        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--flag)' }}>
-                          Failed to load PDF
-                        </div>
-                      }
-                    >
-                      <ReactPDFPage
-                        pageNumber={currentPage}
-                        width={Math.min(600, typeof window !== 'undefined' ? window.innerWidth - 400 : 600)}
-                      />
-                    </ReactPDF>
-                    {numPages > 1 && (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginTop: '16px' }}>
-                        <button
-                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                          disabled={currentPage <= 1}
-                          className="btn btn-ghost btn-sm"
-                          style={{ opacity: currentPage <= 1 ? 0.4 : 1 }}
-                        >
-                          Previous
-                        </button>
-                        <span style={{ fontSize: '13px', color: 'var(--ink-50)' }}>
-                          Page {currentPage} of {numPages}
-                        </span>
-                        <button
-                          onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))}
-                          disabled={currentPage >= numPages}
-                          className="btn btn-ghost btn-sm"
-                          style={{ opacity: currentPage >= numPages ? 0.4 : 1 }}
-                        >
-                          Next
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : status === 'error' ? (
-                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                    <div style={{ color: 'var(--flag)', fontWeight: 500, marginBottom: '4px' }}>Processing failed</div>
-                    <div style={{ color: 'var(--ink-50)', fontSize: '13px' }}>There was an error processing this document</div>
-                  </div>
-                ) : (
-                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--ink-50)' }}>
-                    No document data
-                  </div>
-                )}
-              </div>
+                </div>
+              ) : status === 'done' ? (
+                <PdfViewer
+                  ref={pdfViewerRef}
+                  url={getPdfUrl(caseId, docId)}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  zoom={zoom}
+                  onZoomChange={setZoom}
+                />
+              ) : status === 'error' ? (
+                <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                  <div style={{ color: 'var(--flag)', fontWeight: 500, marginBottom: '4px' }}>Processing failed</div>
+                  <div style={{ color: 'var(--ink-50)', fontSize: '13px' }}>There was an error processing this document</div>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--ink-50)' }}>
+                  No document data
+                </div>
+              )}
             </div>
 
             {/* Right: Clause List */}
@@ -301,7 +249,13 @@ export default function DocumentDetailPage() {
                   return (
                     <div
                       key={clause.id}
-                      onClick={() => setSelectedClause(selectedClause === clause.id ? null : clause.id)}
+                      onClick={() => {
+                        const next = selectedClause === clause.id ? null : clause.id;
+                        setSelectedClause(next);
+                        if (next && clause.page_number) {
+                          pdfViewerRef.current?.jumpToPage(clause.page_number);
+                        }
+                      }}
                       className={`clause-card ${selectedClause === clause.id ? 'active' : ''} ${isReviewed ? 'reviewed' : ''}`}
                       style={isReviewed ? { opacity: 0.6 } : {}}
                     >

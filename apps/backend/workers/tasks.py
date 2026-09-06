@@ -9,7 +9,7 @@ from celery import Task  # type: ignore[import-untyped]
 from celery.exceptions import MaxRetriesExceededError  # type: ignore[import-untyped]
 from sqlalchemy import and_, or_, select, update
 
-from db.session import SessionLocal
+from db.session import CelerySessionLocal as SessionLocal
 from models import Document, ReferenceDocument, ReferenceChunk
 from services.anomaly_detection_service import detect_anomalies_country_law, detect_anomalies_reference_docs
 from services.classification_service import classify_document
@@ -93,8 +93,6 @@ async def _wait_for_reference_docs(case_id: str, timeout: int = 120) -> bool:
 
 
 async def _run_pipeline(document_id: str) -> None:
-    from db.session import engine
-    await engine.dispose()
     await _set_status(document_id, "processing")
     try:
         async with SessionLocal() as session:
@@ -189,8 +187,6 @@ async def _set_ref_status(ref_id: str, new_status: str) -> None:
 
 
 async def _run_ref_pipeline(ref_id: str) -> None:
-    from db.session import engine
-    await engine.dispose()
     await _set_ref_status(ref_id, "processing")
     try:
         async with SessionLocal() as session:

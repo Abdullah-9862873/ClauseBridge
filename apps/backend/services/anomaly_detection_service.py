@@ -4,7 +4,7 @@ import uuid
 
 from sqlalchemy import select
 
-from db.session import SessionLocal
+from db.session import CelerySessionLocal as SessionLocal
 from llm.groq_provider import GroqProvider
 from models.anomaly import Anomaly
 from models.clause import Clause

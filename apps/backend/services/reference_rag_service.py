@@ -3,7 +3,7 @@ import uuid
 
 from sqlalchemy import select
 
-from db.session import SessionLocal
+from db.session import CelerySessionLocal as SessionLocal
 from models.clause import Clause
 from models.reference_chunk import ReferenceChunk
 from models.reference_document import ReferenceDocument

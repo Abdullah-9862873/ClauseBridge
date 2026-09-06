@@ -44,7 +44,7 @@ export function useDocument(caseId: string, docId: string) {
     },
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      if (status === 'queued' || status === 'processing') return 3000;
+      if (status === 'queued' || status === 'processing') return 2000;
       return false;
     },
   });
@@ -114,7 +114,14 @@ export function useAnomalies(
       return res.json();
     },
     placeholderData: (previousData) => previousData,
-    staleTime: 30_000,
+    staleTime: 5_000,
+    // Auto-refetch anomalies every 5 seconds while document is processing
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      // If we have no anomalies yet and document might still be processing, keep checking
+      if (!data || data.items.length === 0) return 5000;
+      return false;
+    },
   });
 }
 

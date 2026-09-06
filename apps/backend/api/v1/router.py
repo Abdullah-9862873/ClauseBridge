@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from api.v1.endpoints import (
     anomalies,
     auth,
+    case_queue,
     cases,
     clauses,
     dashboard,
@@ -31,3 +32,4 @@ router.include_router(reference_documents.router)
 router.include_router(clauses.router)
 router.include_router(anomalies.router)
 router.include_router(dashboard.router)
+router.include_router(case_queue.router)

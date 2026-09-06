@@ -14,7 +14,7 @@ from api.v1.deps import get_current_user
 from api.v1.endpoints.cases import _get_owned_case
 from cache.llm_cache import _redis
 from core.security import decode_token
-from db.session import get_session
+from db.session import get_session_with_retry as get_session
 from models import Anomaly, Clause, Document, User
 from storage.s3_client import download_object, upload_file_to_storage
 from workers.tasks import ingest_document

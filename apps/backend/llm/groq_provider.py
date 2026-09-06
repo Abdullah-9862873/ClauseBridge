@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def _strip_markdown(text: str) -> str:
     """Strip markdown code block wrapping from LLM responses."""
-    match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, re.DOTALL)
+    match = re.search(r"```(?:json)?\\s*\\n?(.*?)\\n?\\s*```", text, re.DOTALL)
     if match:
         return match.group(1).strip()
     return text.strip()
@@ -24,8 +25,43 @@ def _strip_markdown(text: str) -> str:
 
 def _strip_think_tags(text: str) -> str:
     """Strip thinking blocks from Qwen model responses."""
-    pattern = r"<think>.*?</think>\n?"
+    pattern = r"<!think>.*?<!/think>"
     return re.sub(pattern, "", text, flags=re.DOTALL).strip()
+
+
+async def _make_llm_call(
+    self: "GroqProvider", model: str, messages: list[dict], temperature: float, max_tokens: int
+) -> str:
+    """Make an LLM API call with rate limiting."""
+    start = time.monotonic()
+    try:
+        response = self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        content = response.choices[0].message.content or "{}"
+        elapsed = time.monotonic() - start
+        logger.info(
+            "LLM API call took %.2fs (model=%s, max_tokens=%d)",
+            elapsed,
+            model,
+            max_tokens,
+        )
+        return content
+    except groq.RateLimitError as e:
+        elapsed = time.monotonic() - start
+        logger.warning(
+            "LLM API rate limited after %.2fs, retrying in 2s (error: %s)",
+            elapsed,
+            str(e),
+        )
+        await asyncio.sleep(2)
+        return await _make_llm_call(self, model, messages, temperature, max_tokens)
+    except groq.BadRequestError:
+        logger.warning("LLM API 400 error")
+        return "{}"
 
 
 class GroqProvider(LLMProvider):
@@ -44,9 +80,10 @@ class GroqProvider(LLMProvider):
         cached = get_cached("classify", text[:2000])
         if cached:
             return cached  # type: ignore[return-value]
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
+        content = await _make_llm_call(
+            self,
+            self.model,
+            [
                 {
                     "role": "system",
                     "content": self._load_prompt("classify_document.txt"),
@@ -55,9 +92,7 @@ class GroqProvider(LLMProvider):
             ],
             temperature=0.0,
             max_tokens=512,
-            response_format={"type": "json_object"},
         )
-        content = response.choices[0].message.content or "{}"
         logger.info("classify raw response: %r", content[:200])
         try:
             result: dict[str, Any] = json.loads(content)
@@ -74,53 +109,48 @@ class GroqProvider(LLMProvider):
         if cached:
             return cached  # type: ignore[return-value]
         for attempt in range(2):
+            content = await _make_llm_call(
+                self,
+                self.model,
+                [
+                    {"role": "system", "content": self._load_prompt("extract_clauses.txt")},
+                    {"role": "user", "content": text[:2000]},
+                ],
+                temperature=0.0 if attempt == 0 else 0.2,
+                max_tokens=2048,
+            )
+            logger.info("extract_clauses raw response length: %d (attempt %d)", len(content), attempt + 1)
+            cleaned = _strip_think_tags(_strip_markdown(content))
+            logger.info("extract_clauses cleaned response length: %d", len(cleaned))
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": self._load_prompt("extract_clauses.txt")},
-                        {"role": "user", "content": text[:2000]},
-                    ],
-                    temperature=0.0 if attempt == 0 else 0.2,
-                    max_tokens=2048,
-                )
-                content = response.choices[0].message.content or "[]"
-                logger.info("extract_clauses raw response length: %d (attempt %d)", len(content), attempt + 1)
-                cleaned = _strip_think_tags(_strip_markdown(content))
-                logger.info("extract_clauses cleaned response length: %d", len(cleaned))
-                try:
-                    result: list[dict[str, Any]] = json.loads(cleaned)
-                    if result:
-                        break
-                    logger.warning("extract_clauses returned empty array, retrying")
-                except json.JSONDecodeError:
-                    logger.warning("extract_clauses JSON parse failed (attempt %d): %s", attempt + 1, cleaned[:300])
-                    result = []
-            except groq.BadRequestError:
-                logger.warning("extract_clauses 400 error, using default")
+                result: list[dict[str, Any]] = json.loads(cleaned)
+                if result:
+                    break
+                logger.warning("extract_clauses returned empty array, retrying")
+            except json.JSONDecodeError:
+                logger.warning("extract_clauses JSON parse failed (attempt %d): %s", attempt + 1, cleaned[:300])
                 result = []
-                break
         set_cached("extract", cache_key, result)
         return result
 
     async def check_injection(self, text: str) -> bool:
         """Check if text contains a prompt injection attempt."""
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            content = await _make_llm_call(
+                self,
+                self.model,
+                [
                     {"role": "system", "content": self._load_prompt("injection_check.txt")},
                     {"role": "user", "content": text},
                 ],
                 temperature=0.0,
                 max_tokens=256,
             )
-            content = response.choices[0].message.content or "false"
             return content.strip().lower() == "true"
         except groq.RateLimitError:
             logger.warning("check_injection rate limited, skipping — assuming no injection")
             return False
-        
+
     async def detect_anomalies(
         self,
         clause_text: str,
@@ -140,6 +170,7 @@ class GroqProvider(LLMProvider):
         try:
             if country_code:
                 from core.countries import get_legislation_summary
+
                 legislation_summary = get_legislation_summary(country_code)
                 prompt = self._load_prompt("detect_anomalies_country.txt").format(
                     legislation_summary=legislation_summary
@@ -160,31 +191,31 @@ class GroqProvider(LLMProvider):
             # Add reference context if available (Layer 1)
             if reference_context:
                 user_content += (
-                    f"\n\n--- Reference Documents (from uploaded legal references) ---\n"
+                    "\n\n--- Reference Documents (from uploaded legal references) ---\n"
                     f"{reference_context}\n"
-                    f"--- End Reference Documents ---\n\n"
-                    f"IMPORTANT: The above reference documents are from the user's uploaded legal materials. "
-                    f"Check this clause against them first. If it conflicts with or deviates from these references, "
-                    f"flag it as an anomaly with HIGH priority. Cite the specific reference in your reasons."
+                    "--- End Reference Documents ---\n\n"
+                    "IMPORTANT: The above reference documents are from the user's uploaded legal materials. "
+                    "Check this clause against them first. If it conflicts with or deviates from these references, "
+                    "flag it as an anomaly with HIGH priority. Cite the specific reference in your reasons."
                 )
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            content = await _make_llm_call(
+                self,
+                self.model,
+                [
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": user_content},
                 ],
                 temperature=0.0,
                 max_tokens=1024,
             )
-            content = response.choices[0].message.content or "{}"
             cleaned = _strip_think_tags(_strip_markdown(content))
             try:
                 result: dict[str, Any] = json.loads(cleaned)
             except json.JSONDecodeError:
                 logger.warning("detect_anomalies JSON parse failed: %s", cleaned[:300])
                 result = default
-        except groq.BadRequestError:
-            logger.warning("detect_anomalies 400 error, using default")
+        except groq.RateLimitError as e:
+            logger.warning("detect_anomalies rate limited after %.2fs, using default: %s", time.monotonic() - e.__traceback__.tb_frame.f_locals.get('_start', 0), str(e))
             result = default
         set_cached("anomaly", cache_key, result)
         return result
@@ -219,16 +250,16 @@ class GroqProvider(LLMProvider):
             if matched_reference:
                 user_content += f"\nMatched reference document:\n{matched_reference}\n"
 
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            content = await _make_llm_call(
+                self,
+                self.model,
+                [
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": user_content},
                 ],
                 temperature=0.0,
                 max_tokens=512,
             )
-            content = response.choices[0].message.content or "{}"
             cleaned = _strip_think_tags(_strip_markdown(content))
             try:
                 result: dict[str, Any] = json.loads(cleaned)
@@ -238,8 +269,8 @@ class GroqProvider(LLMProvider):
             except json.JSONDecodeError:
                 logger.warning("verify_anomaly JSON parse failed: %s", cleaned[:300])
                 result = default
-        except groq.BadRequestError:
-            logger.warning("verify_anomaly 400 error, using default")
+        except groq.RateLimitError:
+            logger.warning("verify_anomaly rate limited, using default")
             result = default
         set_cached("verify", cache_key, result)
         return result

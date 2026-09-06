@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.v1.deps import get_current_user
 from api.v1.endpoints.cases import _get_owned_case
-from db.session import get_session
+from db.session import get_session_with_retry as get_session
 from models import ReferenceDocument, ReferenceChunk, User
 from storage.s3_client import upload_file_to_storage, download_object
 from workers.tasks import ingest_reference_document

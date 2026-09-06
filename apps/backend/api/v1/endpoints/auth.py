@@ -13,7 +13,7 @@ from core.security import (
     hash_password,
     verify_password,
 )
-from db.session import get_session
+from db.session import get_session_with_retry as get_session
 from models import Firm, User
 
 router = APIRouter(prefix="/auth", tags=["auth"])

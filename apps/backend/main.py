@@ -1,3 +1,8 @@
+import asyncio
+import logging
+
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -5,7 +10,32 @@ from fastapi.responses import JSONResponse
 from api.v1.router import error_response, router
 from core.config import settings
 
-app = FastAPI()
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+
+logger = logging.getLogger(__name__)
+
+_queue_task: asyncio.Task | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _queue_task
+    from case_queue.processor import queue_processor_loop
+    _queue_task = asyncio.create_task(queue_processor_loop())
+    logger.info("=== Queue processor background task started ===")
+    yield
+    if _queue_task:
+        _queue_task.cancel()
+        try:
+            await _queue_task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

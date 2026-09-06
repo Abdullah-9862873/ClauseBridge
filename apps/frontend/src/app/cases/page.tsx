@@ -13,6 +13,7 @@ interface Case {
   id: string;
   title: string;
   status: string;
+  country?: string;
   created_at: string;
 }
 
@@ -53,64 +54,6 @@ export default function CasesPage() {
     }
   }, [searchParams, router]);
 
-  const handleDeleteRetry = useCallback(async (target: Case) => {
-    try {
-      const res = await authFetch(`${API}/api/v1/cases/${target.id}`, {
-        method: 'DELETE',
-      });
-      if (res.status === 0 || res.ok || res.status === 404) {
-        setCases((prev) => prev.filter((c) => c.id !== target.id));
-      } else {
-        throw new Error(`Failed: ${res.status}`);
-      }
-    } catch {
-      setCases((prev) => {
-        if (prev.some((c) => c.id === target.id)) return prev;
-        return [...prev, target];
-      });
-      showToast({
-        message: 'Failed to delete the case.',
-        type: 'error',
-        onRetry: () => handleDeleteRetry(target),
-        onNavigate: () => router.push('/cases'),
-        navigateLabel: 'Go to Cases',
-      });
-    }
-  }, [showToast, router]);
-
-  const handleDelete = () => {
-    if (!deleteTarget) return;
-
-    const target = deleteTarget;
-    const index = cases.findIndex((c) => c.id === target.id);
-    const snapshot = { item: target, index };
-
-    setCases((prev) => prev.filter((c) => c.id !== target.id));
-    setDeleteTarget(null);
-
-    authFetch(`${API}/api/v1/cases/${target.id}`, {
-      method: 'DELETE',
-    }).then((res) => {
-      if (res.status === 0 || res.ok || res.status === 404) return;
-      throw new Error(`Failed: ${res.status}`);
-    }).catch((err) => {
-      console.error('Delete failed:', err);
-      setCases((prev) => {
-        if (prev.some((c) => c.id === target.id)) return prev;
-        const copy = [...prev];
-        copy.splice(snapshot.index, 0, snapshot.item);
-        return copy;
-      });
-      showToast({
-        message: 'Failed to delete the case.',
-        type: 'error',
-        onRetry: () => handleDeleteRetry(target),
-        onNavigate: () => router.push('/cases'),
-        navigateLabel: 'Go to Cases',
-      });
-    });
-  };
-
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
@@ -119,9 +62,7 @@ export default function CasesPage() {
     try {
       const res = await authFetch(`${API}/api/v1/cases`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: newTitle }),
       });
 
@@ -135,12 +76,45 @@ export default function CasesPage() {
       setNewTitle('');
       setShowCreate(false);
       showToast({ message: 'Case created successfully.', type: 'success' });
+      router.push(`/cases/${newCase.id}`);
     } catch {
       setError('Failed to create case');
     } finally {
       setCreating(false);
     }
   };
+
+  const handleDelete = useCallback(() => {
+    if (!deleteTarget) return;
+
+    const target = deleteTarget;
+    const snapshot = { item: target, index: cases.findIndex((c) => c.id === target.id) };
+
+    setCases((prev) => prev.filter((c) => c.id !== target.id));
+    setDeleteTarget(null);
+
+    authFetch(`${API}/api/v1/cases/${target.id}`, { method: 'DELETE' })
+      .then((res) => {
+        if (res.status === 0 || res.ok || res.status === 404) return;
+        throw new Error(`Failed: ${res.status}`);
+      })
+      .catch((err) => {
+        console.error('Delete failed:', err);
+        setCases((prev) => {
+          if (prev.some((c) => c.id === target.id)) return prev;
+          const copy = [...prev];
+          copy.splice(snapshot.index, 0, snapshot.item);
+          return copy;
+        });
+        showToast({
+          message: 'Failed to delete the case.',
+          type: 'error',
+          onRetry: () => handleDelete(),
+          onNavigate: () => router.push('/cases'),
+          navigateLabel: 'Go to Cases',
+        });
+      });
+  }, [cases, deleteTarget, showToast, router]);
 
   return (
     <div className="app-layout">
@@ -198,7 +172,6 @@ export default function CasesPage() {
             </button>
           </div>
 
-          {/* Create Case Modal */}
           {showCreate && (
             <div style={{
               position: 'fixed', inset: 0, background: 'rgba(22,33,44,0.4)',
@@ -235,17 +208,14 @@ export default function CasesPage() {
             </div>
           )}
 
-          {/* Cases List */}
           {loading ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--ink-50)' }}>
               Loading cases...
             </div>
           ) : error ? (
             <div style={{
-              padding: '40px 20px',
-              textAlign: 'center',
-              background: 'var(--surface)',
-              border: '1px solid var(--flag-line)',
+              padding: '40px 20px', textAlign: 'center',
+              background: 'var(--surface)', border: '1px solid var(--flag-line)',
               borderRadius: 'var(--radius)',
             }}>
               <p style={{ fontSize: '14px', color: 'var(--flag)', marginBottom: '12px' }}>{error}</p>
@@ -305,7 +275,7 @@ export default function CasesPage() {
               </table>
             </div>
           )}
-          {/* Delete Case Modal */}
+
           {deleteTarget && (
             <div className="modal-backdrop" onClick={() => setDeleteTarget(null)}>
               <div className="modal-box" onClick={(e) => e.stopPropagation()}>

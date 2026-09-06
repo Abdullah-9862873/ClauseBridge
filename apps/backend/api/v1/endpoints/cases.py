@@ -16,8 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.v1.deps import get_current_user
 from cache.llm_cache import _redis
-from db.session import get_session
-from models import Anomaly, Case, Clause, Document, User
+from db.session import get_session_with_retry as get_session
+from models import Anomaly, Case, Clause, Document, ReferenceChunk, ReferenceDocument, User
 
 logger = logging.getLogger(__name__)
 
@@ -165,9 +165,20 @@ async def delete_case(
     case_id: str,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> dict[str, object]:
+) -> dict[str, str]:
+    """
+    Delete a case including all its documents and related data.
+    """
     case = await _get_owned_case(case_id, user, session)
     case_uuid = case.id
+
+    from services.reference_cache_service import get_reference_cache
+
+    cache = get_reference_cache()
+    if case_uuid in cache._cache:
+        del cache._cache[case_uuid]
+        del cache._filename_map[case_uuid]
+        logger.info("cleared reference cache for case %s", case_uuid)
     doc_result = await session.execute(
         select(Document.id).where(Document.case_id == case_uuid)
     )
@@ -197,6 +208,16 @@ async def delete_case(
         await session.execute(
             delete(Document).where(Document.id.in_(doc_ids))
         )
+    await session.execute(
+        delete(ReferenceChunk).where(
+            ReferenceChunk.reference_document_id.in_(
+                select(ReferenceDocument.id).where(ReferenceDocument.case_id == case_uuid)
+            )
+        )
+    )
+    await session.execute(
+        delete(ReferenceDocument).where(ReferenceDocument.case_id == case_uuid)
+    )
     await session.execute(delete(Case).where(Case.id == case_uuid))
     await session.commit()
     logger.info("deleted case %s with %d documents and %d cache keys", case_id, len(doc_ids), deleted_keys)

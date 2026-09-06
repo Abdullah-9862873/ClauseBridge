@@ -229,6 +229,21 @@ async def _run_ref_pipeline(ref_id: str) -> None:
         raise
     await _set_ref_status(ref_id, "done")
 
+    # Update the in-memory cache for this case so future anomaly detections can use it
+    # Wrap in try-except to prevent cache errors from failing the entire task
+    try:
+        from services.reference_cache_service import init_reference_cache
+
+        async with SessionLocal() as session:
+            ref_doc = await session.get(ReferenceDocument, uuid.UUID(ref_id))
+            assert ref_doc is not None
+            case_id = str(ref_doc.case_id)
+
+        await init_reference_cache(case_id)
+        logger.info("reference cache updated for case %s after ref doc %s", case_id, ref_id)
+    except Exception as cache_error:
+        logger.warning("failed to update reference cache for ref doc %s: %s", ref_id, cache_error)
+
 
 @celery_app.task(bind=True, max_retries=3)
 def ingest_reference_document(self: Task, ref_id: str) -> str:

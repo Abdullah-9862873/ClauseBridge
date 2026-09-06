@@ -1,9 +1,13 @@
+import asyncio
+import logging
 from collections.abc import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 _engine_kwargs: dict = {
     "echo": False,
@@ -33,3 +37,20 @@ SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with SessionLocal() as session:
         yield session
+
+
+async def get_session_with_retry() -> AsyncIterator[AsyncSession]:
+    """Yield a session with retry on DNS/connection failures."""
+    import socket
+    last_err = None
+    for attempt in range(3):
+        try:
+            async with SessionLocal() as session:
+                yield session
+                return
+        except (socket.gaierror, OSError, ConnectionError) as e:
+            last_err = e
+            logger.warning("DB connection failed (attempt %d/3): %s", attempt + 1, e)
+            if attempt < 2:
+                await asyncio.sleep(1.0 * (attempt + 1))
+    raise last_err

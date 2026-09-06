@@ -50,7 +50,12 @@ export async function authFetch(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  let res = await fetch(input, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(input, { ...init, headers });
+  } catch {
+    return Response.error();
+  }
 
   if (res.status === 401 && token) {
     const refreshed = await ensureRefresh();
@@ -58,7 +63,11 @@ export async function authFetch(
       const newToken = localStorage.getItem('access_token');
       if (newToken) {
         headers.set('Authorization', `Bearer ${newToken}`);
-        res = await fetch(input, { ...init, headers });
+        try {
+          res = await fetch(input, { ...init, headers });
+        } catch {
+          return Response.error();
+        }
       }
     }
   }

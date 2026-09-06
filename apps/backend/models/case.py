@@ -10,6 +10,7 @@ from db.base import Base
 
 if TYPE_CHECKING:
     from models.document import Document
+    from models.reference_document import ReferenceDocument
 
 
 class Case(Base):
@@ -24,8 +25,12 @@ class Case(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     documents: Mapped[list["Document"]] = relationship(back_populates="case")
+    reference_documents: Mapped[list["ReferenceDocument"]] = relationship(
+        back_populates="case", cascade="all, delete-orphan"
+    )

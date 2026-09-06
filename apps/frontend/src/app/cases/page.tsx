@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/lib/toast-context';
 import UserChip from '@/components/UserChip';
+import { authFetch } from '@/lib/token-refresh';
+
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 interface Case {
   id: string;
@@ -27,10 +30,7 @@ export default function CasesPage() {
 
   const fetchCases = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://localhost:8000/api/v1/cases?limit=20', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch(`${API}/api/v1/cases?limit=20`);
       if (res.ok) {
         const data = await res.json();
         setCases(data.items || []);
@@ -55,10 +55,8 @@ export default function CasesPage() {
 
   const handleDeleteRetry = useCallback(async (target: Case) => {
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://localhost:8000/api/v1/cases/${target.id}`, {
+      const res = await authFetch(`${API}/api/v1/cases/${target.id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status === 0 || res.ok || res.status === 404) {
         setCases((prev) => prev.filter((c) => c.id !== target.id));
@@ -90,10 +88,8 @@ export default function CasesPage() {
     setCases((prev) => prev.filter((c) => c.id !== target.id));
     setDeleteTarget(null);
 
-    const token = localStorage.getItem('access_token');
-    fetch(`http://localhost:8000/api/v1/cases/${target.id}`, {
+    authFetch(`${API}/api/v1/cases/${target.id}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
     }).then((res) => {
       if (res.status === 0 || res.ok || res.status === 404) return;
       throw new Error(`Failed: ${res.status}`);
@@ -121,12 +117,10 @@ export default function CasesPage() {
     setError('');
 
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://localhost:8000/api/v1/cases', {
+      const res = await authFetch(`${API}/api/v1/cases`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ title: newTitle }),
       });

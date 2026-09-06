@@ -116,18 +116,51 @@ class GroqProvider(LLMProvider):
             return False
         
     async def detect_anomalies(
-        self, clause_text: str, clause_type: str, standard_text: str
+        self,
+        clause_text: str,
+        clause_type: str,
+        standard_text: str,
+        country_code: str | None = None,
+        reference_context: str | None = None,
     ) -> dict[str, Any]:
-        """Compare a clause against a firm standard template.
+        """Compare a clause against a firm standard template and optionally country laws.
         Returns: {"is_anomaly": bool, "severity": str, "reasons": str, "confidence": float}
         """
-        cached = get_cached("anomaly", clause_text[:2000] + standard_text[:2000])
+        cache_key = f"{clause_text[:2000]}{standard_text[:2000]}{country_code or ''}{reference_context[:2000] if reference_context else ''}"
+        cached = get_cached("anomaly", cache_key)
         if cached:
             return cached  # type: ignore[return-value]
         default = {"is_anomaly": False, "severity": "low", "reasons": "", "confidence": 0.0}
         try:
-            prompt = self._load_prompt("detect_anomalies.txt")
-            user_content = f"Clause type: {clause_type}\n\nExtracted clause:\n{clause_text}\n\nFirm standard template:\n{standard_text}"
+            if country_code:
+                from core.countries import get_legislation_summary
+                legislation_summary = get_legislation_summary(country_code)
+                prompt = self._load_prompt("detect_anomalies_country.txt").format(
+                    legislation_summary=legislation_summary
+                )
+                user_content = (
+                    f"Clause type: {clause_type}\n\n"
+                    f"Extracted clause:\n{clause_text}\n\n"
+                    f"Firm standard template:\n{standard_text or '(none provided)'}"
+                )
+            else:
+                prompt = self._load_prompt("detect_anomalies.txt")
+                user_content = (
+                    f"Clause type: {clause_type}\n\n"
+                    f"Extracted clause:\n{clause_text}\n\n"
+                    f"Firm standard template:\n{standard_text}"
+                )
+
+            # Add reference context if available (Layer 1)
+            if reference_context:
+                user_content += (
+                    f"\n\n--- Reference Documents (from uploaded legal references) ---\n"
+                    f"{reference_context}\n"
+                    f"--- End Reference Documents ---\n\n"
+                    f"IMPORTANT: The above reference documents are from the user's uploaded legal materials. "
+                    f"Check this clause against them first. If it conflicts with or deviates from these references, "
+                    f"flag it as an anomaly with HIGH priority. Cite the specific reference in your reasons."
+                )
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -147,5 +180,60 @@ class GroqProvider(LLMProvider):
         except groq.BadRequestError:
             logger.warning("detect_anomalies 400 error, using default")
             result = default
-        set_cached("anomaly", clause_text[:2000] + standard_text[:2000], result)
+        set_cached("anomaly", cache_key, result)
+        return result
+
+    async def verify_anomaly(
+        self,
+        clause_text: str,
+        clause_type: str,
+        severity: str,
+        reasons: str,
+        source: str,
+        matched_reference: str | None = None,
+    ) -> dict[str, Any]:
+        """Verify an anomaly detection result for hallucination.
+        Returns: {"verified": bool, "confidence_adjustment": float}
+        """
+        cache_key = f"verify:{clause_text[:500]}{reasons[:500]}{source}"
+        cached = get_cached("verify", cache_key)
+        if cached:
+            return cached  # type: ignore[return-value]
+        default = {"verified": False, "confidence_adjustment": 0.0}
+        try:
+            prompt = self._load_prompt("verify_anomaly.txt")
+            user_content = (
+                f"Clause type: {clause_type}\n\n"
+                f"Extracted clause:\n{clause_text}\n\n"
+                f"Detected anomaly:\n"
+                f"- Severity: {severity}\n"
+                f"- Reasoning: {reasons}\n"
+                f"- Source: {source}\n"
+            )
+            if matched_reference:
+                user_content += f"\nMatched reference document:\n{matched_reference}\n"
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": user_content},
+                ],
+                temperature=0.0,
+                max_tokens=512,
+            )
+            content = response.choices[0].message.content or "{}"
+            cleaned = _strip_think_tags(_strip_markdown(content))
+            try:
+                result: dict[str, Any] = json.loads(cleaned)
+                # Clamp confidence_adjustment to [-0.3, 0.3]
+                adj = result.get("confidence_adjustment", 0.0)
+                result["confidence_adjustment"] = max(-0.3, min(0.3, adj))
+            except json.JSONDecodeError:
+                logger.warning("verify_anomaly JSON parse failed: %s", cleaned[:300])
+                result = default
+        except groq.BadRequestError:
+            logger.warning("verify_anomaly 400 error, using default")
+            result = default
+        set_cached("verify", cache_key, result)
         return result

@@ -1,19 +1,49 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAnomalies } from '@/lib/hooks';
 import { useToast } from '@/lib/toast-context';
 import UserChip from '@/components/UserChip';
+import { authFetch } from '@/lib/token-refresh';
 
-const API = 'http://localhost:8000';
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-function authHeaders(): Record<string, string> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+const COUNTRIES = [
+  { code: 'IN', name: 'India', flag: '\u{1F1EE}\u{1F1F3}' },
+  { code: 'US', name: 'United States', flag: '\u{1F1FA}\u{1F1F8}' },
+  { code: 'UK', name: 'United Kingdom', flag: '\u{1F1EC}\u{1F1E7}' },
+  { code: 'AE', name: 'United Arab Emirates', flag: '\u{1F1E6}\u{1F1EA}' },
+  { code: 'SG', name: 'Singapore', flag: '\u{1F1F8}\u{1F1EC}' },
+  { code: 'AU', name: 'Australia', flag: '\u{1F1E6}\u{1F1FA}' },
+  { code: 'CA', name: 'Canada', flag: '\u{1F1E8}\u{1F1E6}' },
+  { code: 'DE', name: 'Germany', flag: '\u{1F1E9}\u{1F1EA}' },
+  { code: 'FR', name: 'France', flag: '\u{1F1EB}\u{1F1F7}' },
+  { code: 'JP', name: 'Japan', flag: '\u{1F1EF}\u{1F1F5}' },
+  { code: 'BR', name: 'Brazil', flag: '\u{1F1E7}\u{1F1F7}' },
+  { code: 'ZA', name: 'South Africa', flag: '\u{1F1FF}\u{1F1E6}' },
+  { code: 'NG', name: 'Nigeria', flag: '\u{1F1F3}\u{1F1EC}' },
+  { code: 'SA', name: 'Saudi Arabia', flag: '\u{1F1F8}\u{1F1E6}' },
+  { code: 'KR', name: 'South Korea', flag: '\u{1F1F0}\u{1F1F7}' },
+  { code: 'CN', name: 'China', flag: '\u{1F1E8}\u{1F1F3}' },
+  { code: 'IT', name: 'Italy', flag: '\u{1F1EE}\u{1F1F9}' },
+  { code: 'ES', name: 'Spain', flag: '\u{1F1EA}\u{1F1F8}' },
+  { code: 'NL', name: 'Netherlands', flag: '\u{1F1F3}\u{1F1F1}' },
+  { code: 'CH', name: 'Switzerland', flag: '\u{1F1E8}\u{1F1ED}' },
+  { code: 'MX', name: 'Mexico', flag: '\u{1F1F2}\u{1F1FD}' },
+  { code: 'AR', name: 'Argentina', flag: '\u{1F1E6}\u{1F1F7}' },
+  { code: 'EG', name: 'Egypt', flag: '\u{1F1EA}\u{1F1EC}' },
+  { code: 'PH', name: 'Philippines', flag: '\u{1F1F5}\u{1F1ED}' },
+  { code: 'MY', name: 'Malaysia', flag: '\u{1F1F2}\u{1F1FE}' },
+  { code: 'TH', name: 'Thailand', flag: '\u{1F1F9}\u{1F1ED}' },
+  { code: 'VN', name: 'Vietnam', flag: '\u{1F1FB}\u{1F1F3}' },
+  { code: 'ID', name: 'Indonesia', flag: '\u{1F1EE}\u{1F1E9}' },
+  { code: 'PK', name: 'Pakistan', flag: '\u{1F1F5}\u{1F1F0}' },
+  { code: 'BD', name: 'Bangladesh', flag: '\u{1F1E7}\u{1F1E9}' },
+  { code: 'KE', name: 'Kenya', flag: '\u{1F1F0}\u{1F1EA}' },
+];
 
 interface Document {
   id: string;
@@ -21,6 +51,15 @@ interface Document {
   status: string;
   document_type: string | null;
   classification_confidence: number | null;
+  country: string | null;
+  created_at: string;
+}
+
+interface ReferenceDocument {
+  id: string;
+  filename: string;
+  status: string;
+  chunk_count: number;
   created_at: string;
 }
 
@@ -28,6 +67,7 @@ interface CaseDetail {
   id: string;
   title: string;
   status: string;
+  country: string | null;
   created_at: string;
 }
 
@@ -59,27 +99,42 @@ export default function CaseDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+
+  const [selectedCountry, setSelectedCountry] = useState('');
+  const [countrySaved, setCountrySaved] = useState(false);
+
+  const [refUploading, setRefUploading] = useState(false);
+  const [refUploadError, setRefUploadError] = useState('');
+  const refFileInputRef = useRef<HTMLInputElement>(null);
+
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [localDocuments, setLocalDocuments] = useState<Document[] | null>(null);
   const [downloadStatus, setDownloadStatus] = useState('');
   const lastFileRef = useRef<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: caseDetail, isError: caseError } = useQuery<CaseDetail>({
     queryKey: ['case', caseId],
     queryFn: async () => {
-      const res = await fetch(`${API}/api/v1/cases/${caseId}`, { headers: authHeaders() });
+      const res = await authFetch(`${API}/api/v1/cases/${caseId}`);
       if (!res.ok) throw new Error('Failed');
       return res.json();
     },
   });
 
+  // Auto-load country from case detail
+  useEffect(() => {
+    if (caseDetail?.country) {
+      setSelectedCountry(caseDetail.country);
+      setCountrySaved(true);
+    }
+  }, [caseDetail]);
+
   const { data: docData, isError: docsError, isLoading: docsLoading } = useQuery<{ items: Document[] }>({
     queryKey: ['documents', caseId],
     queryFn: async () => {
-      const res = await fetch(`${API}/api/v1/cases/${caseId}/documents`, { headers: authHeaders() });
+      const res = await authFetch(`${API}/api/v1/cases/${caseId}/documents`);
       if (!res.ok) throw new Error('Failed');
       return res.json();
     },
@@ -90,14 +145,22 @@ export default function CaseDetailPage() {
     },
   });
 
+  const { data: refData, refetch: refetchRefs } = useQuery<{ items: ReferenceDocument[] }>({
+    queryKey: ['reference-documents', caseId],
+    queryFn: async () => {
+      const res = await authFetch(`${API}/api/v1/cases/${caseId}/reference-documents`);
+      if (!res.ok) return { items: [] };
+      return res.json();
+    },
+  });
+
   const documents = localDocuments ?? docData?.items ?? null;
+  const refDocuments = refData?.items ?? [];
 
   const handleDeleteDocRetry = useCallback(async (target: Document) => {
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch(`${API}/api/v1/cases/${caseId}/documents/${target.id}`, {
+      const res = await authFetch(`${API}/api/v1/cases/${caseId}/documents/${target.id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status === 0 || res.ok || res.status === 404) {
         setLocalDocuments((prev) => (prev ?? []).filter((d) => d.id !== target.id));
@@ -126,16 +189,15 @@ export default function CaseDetailPage() {
     if (!deleteTarget) return;
 
     const target = deleteTarget;
-    const currentDocs = localDocuments ?? docData?.items ?? [];    const index = currentDocs.findIndex((d) => d.id === target.id);
+    const currentDocs = localDocuments ?? docData?.items ?? [];
+    const index = currentDocs.findIndex((d) => d.id === target.id);
     const snapshot = { item: target, index };
 
     setLocalDocuments(currentDocs.filter((d) => d.id !== target.id));
     setDeleteTarget(null);
 
-    const token = localStorage.getItem('access_token');
-    fetch(`${API}/api/v1/cases/${caseId}/documents/${target.id}`, {
+    authFetch(`${API}/api/v1/cases/${caseId}/documents/${target.id}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
     }).then((res) => {
       if (res.status === 0 || res.ok || res.status === 404) {
         queryClient.invalidateQueries({ queryKey: ['documents', caseId] });
@@ -177,19 +239,23 @@ export default function CaseDetailPage() {
         return;
       }
 
+      if (!selectedCountry) {
+        setUploadError('Please select a country before uploading documents.');
+        return;
+      }
+
       setUploading(true);
       setUploadError('');
 
       try {
-        const token = localStorage.getItem('access_token');
         const idempotencyKey = crypto.randomUUID();
         const formData = new FormData();
         formData.append('file', file);
+        formData.append('country', selectedCountry);
 
-        const res = await fetch(`${API}/api/v1/cases/${caseId}/documents`, {
+        const res = await authFetch(`${API}/api/v1/cases/${caseId}/documents`, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${token}`,
             'Idempotency-Key': idempotencyKey,
           },
           body: formData,
@@ -210,7 +276,7 @@ export default function CaseDetailPage() {
         setUploading(false);
       }
     },
-    [caseId, queryClient]
+    [caseId, queryClient, selectedCountry]
   );
 
   const handleRetryUpload = useCallback(() => {
@@ -221,6 +287,58 @@ export default function CaseDetailPage() {
     const syntheticEvent = { target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>;
     handleUpload(syntheticEvent);
   }, [handleUpload]);
+
+  const handleRefUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+
+      setRefUploading(true);
+      setRefUploadError('');
+
+      try {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (file.type !== 'application/pdf') {
+            setRefUploadError(`${file.name} is not a PDF. Only PDF files are allowed.`);
+            continue;
+          }
+          const formData = new FormData();
+          formData.append('file', file);
+          const res = await authFetch(`${API}/api/v1/cases/${caseId}/reference-documents`, {
+            method: 'POST',
+            body: formData,
+          });
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || `Failed to upload ${file.name}`);
+          }
+        }
+        refetchRefs();
+        showToast({ message: 'Reference document(s) uploaded successfully.', type: 'success' });
+        if (refFileInputRef.current) refFileInputRef.current.value = '';
+      } catch (err: unknown) {
+        setRefUploadError(err instanceof Error ? err.message : 'Upload failed');
+      } finally {
+        setRefUploading(false);
+      }
+    },
+    [caseId, refetchRefs, showToast]
+  );
+
+  const handleDeleteRef = useCallback(
+    async (refId: string) => {
+      try {
+        await authFetch(`${API}/api/v1/cases/${caseId}/reference-documents/${refId}`, {
+          method: 'DELETE',
+        });
+        refetchRefs();
+      } catch {
+        showToast({ message: 'Failed to delete reference document.', type: 'error' });
+      }
+    },
+    [caseId, refetchRefs, showToast]
+  );
 
   return (
     <div className="app-layout">
@@ -276,57 +394,167 @@ export default function CaseDetailPage() {
               <div className="case-meta">
                 <div className="item">
                   <span>Documents</span>
-                  {documents !== null ? documents.length : '—'}
+                  {documents !== null ? documents.length : '\u2014'}
                 </div>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              {documents && documents.length > 0 && (
-                <button
-                  className="btn btn-ghost btn-sm"
-                  disabled={!!downloadStatus}
-                  onClick={async () => {
-                    try {
-                      setDownloadStatus('Fetching details...');
-                      await new Promise((r) => setTimeout(r, 400));
-                      setDownloadStatus('Compiling document...');
-                      const token = localStorage.getItem('access_token');
-                      const res = await fetch(`${API}/api/v1/cases/${caseId}/report/pdf`, {
-                        headers: token ? { Authorization: `Bearer ${token}` } : {},
-                      });
-                      if (!res.ok) throw new Error(`Failed: ${res.status}`);
-                      setDownloadStatus('Downloading...');
-                      const blob = await res.blob();
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = 'clausebridge-report.pdf';
-                      a.click();
-                      URL.revokeObjectURL(url);
-                      await new Promise((r) => setTimeout(r, 500));
-                    } catch {
-                      showToast({ message: 'Failed to download report.', type: 'error' });
-                    } finally {
-                      setDownloadStatus('');
-                    }
-                  }}
-                >
-                  {downloadStatus || 'Download Report'}
-                </button>
-              )}
-              <label className="btn btn-primary" style={{ width: 'auto', marginTop: 0, cursor: 'pointer' }}>
-                {uploading ? 'Uploading...' : 'Upload PDF'}
-                <input
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleUpload}
-                  disabled={uploading}
-                  style={{ display: 'none' }}
-                />
-              </label>
+          </div>
+
+          {/* ===== SECTION 1: COUNTRY + REFERENCE DOCS ===== */}
+          <div className="card" style={{ marginBottom: '20px' }}>
+            <div className="card-head">
+              <h3>Analysis Settings</h3>
+            </div>
+            <div style={{ padding: '20px' }}>
+              {/* Country Selection */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--ink)', marginBottom: '6px' }}>
+                  Country <span style={{ color: 'var(--flag)', fontSize: '12px' }}>*required</span>
+                </label>
+                <p style={{ fontSize: '12px', color: 'var(--ink-50)', margin: '0 0 8px 0' }}>
+                  Select the country whose laws should be checked against your documents.
+                </p>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {COUNTRIES.map((c) => (
+                    <button
+                      key={c.code}
+                      onClick={() => {
+                        setSelectedCountry(c.code);
+                        setCountrySaved(false);
+                      }}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: 'var(--radius)',
+                        border: selectedCountry === c.code ? '2px solid var(--ink)' : '1px solid var(--ink-20)',
+                        background: selectedCountry === c.code ? 'var(--ink)' : 'transparent',
+                        color: selectedCountry === c.code ? '#fff' : 'var(--ink)',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: selectedCountry === c.code ? 600 : 400,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <span>{c.flag}</span>
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+                {selectedCountry && !countrySaved && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await authFetch(`${API}/api/v1/cases/${caseId}`, {
+                          method: 'PATCH',
+                          headers: {
+                            'Content-Type': 'application/json',
+                          },
+                          body: JSON.stringify({ country: selectedCountry }),
+                        });
+                        if (res.ok) {
+                          setCountrySaved(true);
+                          queryClient.invalidateQueries({ queryKey: ['case', caseId] });
+                          showToast({ message: 'Country saved successfully.', type: 'success' });
+                        } else {
+                          showToast({ message: 'Failed to save country.', type: 'error' });
+                        }
+                      } catch {
+                        showToast({ message: 'Failed to save country.', type: 'error' });
+                      }
+                    }}
+                    style={{
+                      marginTop: '10px', padding: '6px 16px', borderRadius: 'var(--radius)',
+                      border: 'none', background: 'var(--accent)', color: '#fff',
+                      fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    Save Country Selection
+                  </button>
+                )}
+                {countrySaved && (
+                  <span style={{ marginTop: '10px', display: 'block', fontSize: '12px', color: 'var(--accent)', fontWeight: 500 }}>
+                    \u2713 Country saved — documents will be analyzed against {COUNTRIES.find((c) => c.code === selectedCountry)?.name} laws
+                  </span>
+                )}
+              </div>
+
+              {/* Reference Documents */}
+              <div style={{ borderTop: '1px solid var(--ink-20)', paddingTop: '16px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--ink)', marginBottom: '6px' }}>
+                  Reference Documents <span style={{ color: 'var(--ink-35)', fontSize: '12px', fontWeight: 400 }}>(optional)</span>
+                </label>
+                <p style={{ fontSize: '12px', color: 'var(--ink-50)', margin: '0 0 10px 0', lineHeight: 1.5 }}>
+                  Upload legal documents (law books, contracts, policies) that you want your documents checked against.
+                  The system will prioritize findings from these reference documents over general country law knowledge.
+                  <br />
+                  <strong>How it works:</strong> Your reference documents are read and embedded. When analyzing a contract,
+                  the system first checks each clause against your uploaded references, then checks against {selectedCountry ? COUNTRIES.find((c) => c.code === selectedCountry)?.name + '\'s' : 'the selected country\'s'} freely available laws.
+                </p>
+
+                {refDocuments.length > 0 && (
+                  <div style={{ marginBottom: '10px' }}>
+                    {refDocuments.map((ref) => (
+                      <div key={ref.id} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '8px 12px', borderRadius: 'var(--radius)',
+                        border: '1px solid var(--ink-20)', marginBottom: '6px', fontSize: '13px',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'var(--accent-bg)', color: 'var(--accent)' }}>
+                            REF
+                          </span>
+                          {ref.filename}
+                          {ref.status === 'done' && (
+                            <span style={{ fontSize: '11px', color: 'var(--ink-35)' }}>
+                              ({ref.chunk_count} chunks embedded)
+                            </span>
+                          )}
+                          {ref.status !== 'done' && (
+                            <span style={{ fontSize: '11px', color: 'var(--ink-35)' }}>
+                              ({ref.status})
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleDeleteRef(ref.id)}
+                          style={{
+                            background: 'none', border: 'none', color: 'var(--flag)',
+                            cursor: 'pointer', fontSize: '12px', padding: '2px 6px',
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <label className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', width: 'auto' }}>
+                    {refUploading ? 'Uploading...' : 'Add Reference PDFs'}
+                    <input
+                      ref={refFileInputRef}
+                      type="file"
+                      accept=".pdf"
+                      multiple
+                      onChange={handleRefUpload}
+                      disabled={refUploading}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                  <span style={{ fontSize: '12px', color: 'var(--ink-35)' }}>PDF files up to 10MB each</span>
+                </div>
+                {refUploadError && (
+                  <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--flag)' }}>
+                    {refUploadError}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
+          {/* ===== SECTION 2: DOCUMENT UPLOAD + TABLE (existing) ===== */}
           {uploadError && (
             <div style={{
               padding: '10px 13px', background: 'var(--flag-bg)',
@@ -347,6 +575,54 @@ export default function CaseDetailPage() {
               </button>
             </div>
           )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '12px' }}>
+            {documents && documents.length > 0 && (() => {
+              const allDone = documents.every((d) => d.status === 'done');
+              const anyProcessing = documents.some((d) => d.status === 'queued' || d.status === 'processing');
+              return (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={!!downloadStatus || anyProcessing}
+                  title={anyProcessing ? 'Wait for document processing to complete' : undefined}
+                  onClick={async () => {
+                  try {
+                    setDownloadStatus('Fetching details...');
+                    await new Promise((r) => setTimeout(r, 400));
+                    setDownloadStatus('Compiling document...');
+                    const res = await authFetch(`${API}/api/v1/cases/${caseId}/report/pdf`);
+                    if (!res.ok) throw new Error(`Failed: ${res.status}`);
+                    setDownloadStatus('Downloading...');
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'clausebridge-report.pdf';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    await new Promise((r) => setTimeout(r, 500));
+                  } catch {
+                    showToast({ message: 'Failed to download report.', type: 'error' });
+                  } finally {
+                    setDownloadStatus('');
+                  }
+                }}
+              >
+                {downloadStatus || (anyProcessing ? 'Processing...' : 'Download Report')}
+              </button>
+              );
+            })()}
+            <label className="btn btn-primary" style={{ width: 'auto', marginTop: 0, cursor: 'pointer' }}>
+              {uploading ? 'Uploading...' : 'Upload PDF'}
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={handleUpload}
+                disabled={uploading}
+                style={{ display: 'none' }}
+              />
+            </label>
+          </div>
 
           <div className="dropzone">
             <strong>Drop files to add to this case</strong> &mdash; or click &ldquo;Upload PDF&rdquo; above. PDF files up to 10MB.
@@ -375,7 +651,7 @@ export default function CaseDetailPage() {
               if (!documents || documents.length === 0) {
                 return (
                   <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--ink-50)', fontSize: '13.5px' }}>
-                    No documents uploaded yet. Upload a PDF to start analysis.
+                    No documents uploaded yet. Select a country above, then upload a PDF to start analysis.
                   </div>
                 );
               }
@@ -385,6 +661,7 @@ export default function CaseDetailPage() {
                     <tr>
                       <th>File</th>
                       <th>Type</th>
+                      <th>Country</th>
                       <th>Status</th>
                       <th></th>
                     </tr>
@@ -399,6 +676,15 @@ export default function CaseDetailPage() {
                           </div>
                         </td>
                         <td>{doc.document_type || 'Awaiting classification'}</td>
+                        <td>
+                          {doc.country ? (
+                            <span style={{ fontSize: '12px' }}>
+                              {COUNTRIES.find((c) => c.code === doc.country)?.flag} {doc.country}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--ink-35)', fontSize: '12px' }}>\u2014</span>
+                          )}
+                        </td>
                         <td>
                           <span className={`pill ${STATUS_PILL[doc.status] || 'queued'}`}>
                             {doc.status}

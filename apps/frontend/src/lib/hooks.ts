@@ -2,12 +2,9 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-const API = 'http://localhost:8000';
+import { authFetch } from './token-refresh';
 
-function authHeaders(): Record<string, string> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export interface DocumentDetail {
   id: string;
@@ -41,9 +38,7 @@ export function useDocument(caseId: string, docId: string) {
   return useQuery<DocumentDetail>({
     queryKey: ['document', caseId, docId],
     queryFn: async () => {
-      const res = await fetch(`${API}/api/v1/cases/${caseId}/documents/${docId}`, {
-        headers: authHeaders(),
-      });
+      const res = await authFetch(`${API}/api/v1/cases/${caseId}/documents/${docId}`);
       if (!res.ok) throw new Error('Failed to fetch document');
       return res.json();
     },
@@ -59,9 +54,7 @@ export function useClauses(caseId: string, docId: string) {
   return useQuery<{ items: Clause[] }>({
     queryKey: ['clauses', caseId, docId],
     queryFn: async () => {
-      const res = await fetch(`${API}/api/v1/cases/${caseId}/documents/${docId}/clauses?limit=100`, {
-        headers: authHeaders(),
-      });
+      const res = await authFetch(`${API}/api/v1/cases/${caseId}/documents/${docId}/clauses?limit=100`);
       if (!res.ok) throw new Error('Failed to fetch clauses');
       return res.json();
     },
@@ -83,9 +76,7 @@ export function useStats() {
   return useQuery<DashboardStats>({
     queryKey: ['stats'],
     queryFn: async () => {
-      const res = await fetch(`${API}/api/v1/dashboard/stats`, {
-        headers: authHeaders(),
-      });
+      const res = await authFetch(`${API}/api/v1/dashboard/stats`);
       if (!res.ok) throw new Error('Failed to fetch stats');
       return res.json();
     },
@@ -99,6 +90,9 @@ export interface Anomaly {
   reasons: string;
   confidence: number;
   reviewed: boolean;
+  source: string;
+  matched_reference: string | null;
+  verified: boolean;
   created_at: string;
 }
 
@@ -113,9 +107,8 @@ export function useAnomalies(
       const params = new URLSearchParams({ document_id: docId, limit: '100' });
       if (filters?.severity) params.set('severity', filters.severity);
       if (filters?.reviewed !== undefined) params.set('reviewed', String(filters.reviewed));
-      const res = await fetch(
-        `${API}/api/v1/cases/${caseId}/anomalies?${params}`,
-        { headers: authHeaders() }
+      const res = await authFetch(
+        `${API}/api/v1/cases/${caseId}/anomalies?${params}`
       );
       if (!res.ok) throw new Error('Failed to fetch anomalies');
       return res.json();
@@ -129,11 +122,11 @@ export function useMarkReviewed(caseId: string, docId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ anomalyId, reviewed }: { anomalyId: string; reviewed: boolean }) => {
-      const res = await fetch(
+      const res = await authFetch(
         `${API}/api/v1/cases/${caseId}/anomalies/${anomalyId}/review`,
         {
           method: 'PATCH',
-          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reviewed }),
         }
       );

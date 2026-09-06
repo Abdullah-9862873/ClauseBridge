@@ -1,6 +1,7 @@
-const API = 'http://localhost:8000';
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+let refreshPromise: Promise<boolean> | null = null;
 
 function parseJwtExp(token: string): number | null {
   try {
@@ -28,6 +29,41 @@ async function doRefresh(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function ensureRefresh(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = doRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+export async function authFetch(
+  input: RequestInfo,
+  init?: RequestInit
+): Promise<Response> {
+  const token = localStorage.getItem('access_token');
+  const headers = new Headers(init?.headers);
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  let res = await fetch(input, { ...init, headers });
+
+  if (res.status === 401 && token) {
+    const refreshed = await ensureRefresh();
+    if (refreshed) {
+      const newToken = localStorage.getItem('access_token');
+      if (newToken) {
+        headers.set('Authorization', `Bearer ${newToken}`);
+        res = await fetch(input, { ...init, headers });
+      }
+    }
+  }
+
+  return res;
 }
 
 export function scheduleRefresh(token: string) {

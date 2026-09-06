@@ -36,6 +36,7 @@ def _safe_text(text: str) -> str:
 
 class CaseCreateRequest(BaseModel):
     title: str
+    country: str | None = None
 
 
 def _encode_cursor(created_at: datetime, case_id: uuid.UUID) -> str:
@@ -67,7 +68,7 @@ async def create_case(
     )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="a case with this title already exists")
-    case = Case(firm_id=user.firm_id, title=title)
+    case = Case(firm_id=user.firm_id, title=title, country=payload.country)
     session.add(case)
     await session.commit()
     return {"id": str(case.id), "title": case.title}
@@ -109,6 +110,7 @@ async def list_cases(
                 "id": str(c.id),
                 "title": c.title,
                 "status": c.status,
+                "country": c.country,
                 "created_at": c.created_at.isoformat(),
             }
             for c in items
@@ -129,14 +131,15 @@ async def get_case(
     case_id: str,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     case = await _get_owned_case(case_id, user, session)
-    return {"id": str(case.id), "title": case.title, "status": case.status}
+    return {"id": str(case.id), "title": case.title, "status": case.status, "country": case.country}
 
 
 class CaseUpdateRequest(BaseModel):
     title: str | None = None
     status: str | None = None
+    country: str | None = None
 
 
 @router.patch("/{case_id}")
@@ -151,8 +154,10 @@ async def update_case(
         case.title = payload.title
     if payload.status is not None:
         case.status = payload.status
+    if payload.country is not None:
+        case.country = payload.country
     await session.commit()
-    return {"id": str(case.id), "title": case.title, "status": case.status}
+    return {"id": str(case.id), "title": case.title, "status": case.status, "country": case.country}
 
 
 @router.delete("/{case_id}")
@@ -307,17 +312,25 @@ async def download_report(
 
         for clause, anomaly in doc_anomalies:
             review_status = "PENDING REVIEW" if not anomaly.reviewed else "Reviewed"
+            verified_status = "VERIFIED" if anomaly.verified else "UNVERIFIED"
             pdf.set_font("Helvetica", "B", 11)
             sev_label = anomaly.severity.upper()
-            pdf.cell(0, 8, text=_safe_text(f"[{sev_label}] {clause.clause_type} (Page {clause.page_number}) - {review_status}"), new_x="LMARGIN", new_y="NEXT")
+            source_label = anomaly.source.replace("_", " ").title() if anomaly.source else "Unknown"
+            pdf.cell(0, 8, text=_safe_text(f"[{sev_label}] {clause.clause_type} (Page {clause.page_number}) - {review_status} - {verified_status}"), new_x="LMARGIN", new_y="NEXT")
 
             pdf.set_font("Helvetica", "", 9)
-            pdf.cell(0, 6, text=f"Confidence: {anomaly.confidence * 100:.0f}%", new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 6, text=f"Confidence: {anomaly.confidence * 100:.0f}%  |  Source: {source_label}", new_x="LMARGIN", new_y="NEXT")
 
             pdf.set_font("Helvetica", "B", 9)
             pdf.cell(0, 6, text="Clause:", new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("Helvetica", "", 9)
             pdf.multi_cell(0, 5, text=_safe_text(clause.clause_text[:500]))
+
+            if anomaly.matched_reference:
+                pdf.set_font("Helvetica", "B", 9)
+                pdf.cell(0, 6, text="Matched Reference:", new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "I", 8)
+                pdf.multi_cell(0, 5, text=_safe_text(anomaly.matched_reference[:500]))
 
             pdf.set_font("Helvetica", "B", 9)
             pdf.cell(0, 6, text="Reason:", new_x="LMARGIN", new_y="NEXT")

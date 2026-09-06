@@ -67,6 +67,7 @@ class FakeCase:
         self.firm_id = kwargs.get("firm_id", uuid.uuid4())
         self.title = kwargs.get("title", "Test Case")
         self.status = kwargs.get("status", "active")
+        self.country = kwargs.get("country", None)
         self.created_at = kwargs.get("created_at", datetime.now(UTC))
 
 

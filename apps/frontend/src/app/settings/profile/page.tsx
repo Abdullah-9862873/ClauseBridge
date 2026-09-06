@@ -4,9 +4,10 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
+import { authFetch } from '@/lib/token-refresh';
 import UserChip from '@/components/UserChip';
 
-const API = 'http://localhost:8000';
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -28,12 +29,10 @@ export default function ProfilePage() {
     }
     setLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch(`${API}/api/v1/auth/password`, {
+      const res = await authFetch(`${API}/api/v1/auth/password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
       });

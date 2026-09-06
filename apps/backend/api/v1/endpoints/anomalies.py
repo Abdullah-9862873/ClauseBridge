@@ -81,6 +81,9 @@ async def list_anomalies(
                 "reasons": a.reasons,
                 "confidence": a.confidence,
                 "reviewed": a.reviewed,
+                "source": a.source,
+                "matched_reference": a.matched_reference,
+                "verified": a.verified,
                 "created_at": a.created_at.isoformat(),
             }
             for a in items

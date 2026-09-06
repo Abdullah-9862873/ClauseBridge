@@ -1,9 +1,9 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { scheduleRefresh, clearRefresh } from '@/lib/token-refresh';
+import { scheduleRefresh, clearRefresh, authFetch } from '@/lib/token-refresh';
 
-const API = 'http://localhost:8000';
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 interface User {
   id: string;
@@ -27,9 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
       return;
     }
-    fetch(`${API}/api/v1/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    authFetch(`${API}/api/v1/auth/me`)
       .then((res) => {
         if (!res.ok) throw new Error();
         return res.json();

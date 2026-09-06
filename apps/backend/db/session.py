@@ -1,12 +1,23 @@
 from collections.abc import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
 
 from core.config import settings
 
-# Create the async engine
-engine = create_async_engine(settings.database_url, echo=False, poolclass=NullPool)
+_engine_kwargs: dict = {
+    "echo": False,
+}
+
+# Only use connection pooling for PostgreSQL (Supabase), not SQLite (tests)
+if settings.database_url.startswith("postgresql"):
+    _engine_kwargs.update({
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_size": 5,
+        "max_overflow": 10,
+    })
+
+engine = create_async_engine(settings.database_url, **_engine_kwargs)
 
 # Create the session maker
 SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

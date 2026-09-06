@@ -93,6 +93,8 @@ async def _wait_for_reference_docs(case_id: str, timeout: int = 120) -> bool:
 
 
 async def _run_pipeline(document_id: str) -> None:
+    from db.session import engine
+    await engine.dispose()
     await _set_status(document_id, "processing")
     try:
         async with SessionLocal() as session:
@@ -187,6 +189,8 @@ async def _set_ref_status(ref_id: str, new_status: str) -> None:
 
 
 async def _run_ref_pipeline(ref_id: str) -> None:
+    from db.session import engine
+    await engine.dispose()
     await _set_ref_status(ref_id, "processing")
     try:
         async with SessionLocal() as session:

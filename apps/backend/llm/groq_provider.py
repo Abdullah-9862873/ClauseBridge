@@ -69,32 +69,38 @@ class GroqProvider(LLMProvider):
 
     async def extract_clauses(self, text: str) -> list[dict[str, Any]]:
         """Extract key clauses from a document."""
-        cached = get_cached("extract", text[:2000])
+        cache_key = text[:2000]
+        cached = get_cached("extract", cache_key)
         if cached:
             return cached  # type: ignore[return-value]
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": self._load_prompt("extract_clauses.txt")},
-                    {"role": "user", "content": text[:2000]},
-                ],
-                temperature=0.0,
-                max_tokens=1024,
-            )
-            content = response.choices[0].message.content or "[]"
-            logger.info("extract_clauses raw response length: %d", len(content))
-            cleaned = _strip_think_tags(_strip_markdown(content))
-            logger.info("extract_clauses cleaned response length: %d", len(cleaned))
+        for attempt in range(2):
             try:
-                result: list[dict[str, Any]] = json.loads(cleaned)
-            except json.JSONDecodeError:
-                logger.warning("extract_clauses JSON parse failed: %s", cleaned[:300])
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": self._load_prompt("extract_clauses.txt")},
+                        {"role": "user", "content": text[:2000]},
+                    ],
+                    temperature=0.0 if attempt == 0 else 0.2,
+                    max_tokens=2048,
+                )
+                content = response.choices[0].message.content or "[]"
+                logger.info("extract_clauses raw response length: %d (attempt %d)", len(content), attempt + 1)
+                cleaned = _strip_think_tags(_strip_markdown(content))
+                logger.info("extract_clauses cleaned response length: %d", len(cleaned))
+                try:
+                    result: list[dict[str, Any]] = json.loads(cleaned)
+                    if result:
+                        break
+                    logger.warning("extract_clauses returned empty array, retrying")
+                except json.JSONDecodeError:
+                    logger.warning("extract_clauses JSON parse failed (attempt %d): %s", attempt + 1, cleaned[:300])
+                    result = []
+            except groq.BadRequestError:
+                logger.warning("extract_clauses 400 error, using default")
                 result = []
-        except groq.BadRequestError:
-            logger.warning("extract_clauses 400 error, using default")
-            result = []
-        set_cached("extract", text[:2000], result)
+                break
+        set_cached("extract", cache_key, result)
         return result
 
     async def check_injection(self, text: str) -> bool:

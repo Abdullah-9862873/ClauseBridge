@@ -10,8 +10,8 @@ from celery.exceptions import MaxRetriesExceededError  # type: ignore[import-unt
 from sqlalchemy import and_, or_, select, update
 
 from db.session import CelerySessionLocal as SessionLocal
-from models import Document, ReferenceDocument, ReferenceChunk
-from services.anomaly_detection_service import detect_anomalies_country_law, detect_anomalies_reference_docs
+from models import Clause, Document, ReferenceDocument, ReferenceChunk
+from services.anomaly_detection_service import detect_anomalies_country_law, detect_anomalies_reference_docs, detect_document_level_anomalies
 from services.classification_service import classify_document
 from services.clause_extraction_service import extract_and_store_clauses
 from services.injection_guard import check_injection
@@ -120,19 +120,60 @@ async def _run_pipeline(document_id: str) -> None:
         await check_injection(text)
         classification = await classify_document(document_id, text)
         doc_type = classification.get("type", "other")
-        if doc_type == "other":
-            logger.info("document %s classified as non-legal (%s), skipping extraction", document_id, doc_type)
-        else:
-            clause_count = await extract_and_store_clauses(document_id, text)
-            logger.info("document %s saved %d clauses", document_id, clause_count)
-            country = doc.country if hasattr(doc, "country") else None
+        country = doc.country if hasattr(doc, "country") else None
 
-            country_count = await detect_anomalies_country_law(document_id, country=country)
-            logger.info("document %s: %d anomalies from country law (country=%s)", document_id, country_count, country)
+        # Always extract clauses and run anomaly detection - every document should be evaluated
+        clause_count = await extract_and_store_clauses(document_id, text)
+        logger.info("document %s saved %d clauses", document_id, clause_count)
 
-            await _wait_for_reference_docs(str(doc.case_id))
-            ref_count = await detect_anomalies_reference_docs(document_id, str(doc.case_id))
-            logger.info("document %s: %d anomalies from reference docs", document_id, ref_count)
+        # Run FULL DOCUMENT analysis with the complete text (not just extracted clauses)
+        # This catches cross-paragraph contradictions and legal violations that span the entire document
+        if country:
+            from llm.groq_provider import GroqProvider
+            llm_provider = GroqProvider()
+            full_doc_result = await llm_provider.analyze_full_document(
+                full_text=text,
+                country_code=country,
+            )
+            logger.info(
+                "document %s full-doc analysis: is_anomaly=%s, severity=%s, confidence=%.2f, law=%s",
+                document_id,
+                full_doc_result.get("is_anomaly"),
+                full_doc_result.get("severity"),
+                full_doc_result.get("confidence", 0.0),
+                full_doc_result.get("applicable_law", "N/A"),
+            )
+            if full_doc_result.get("is_anomaly"):
+                # Save the full-document anomaly - attach to first clause if available
+                from services.anomaly_detection_service import _save_anomaly
+                async with SessionLocal() as session:
+                    from sqlalchemy import select as sql_select
+                    clause_result = await session.execute(
+                        sql_select(Clause).where(Clause.document_id == uuid.UUID(document_id)).limit(1)
+                    )
+                    first_clause = clause_result.scalar_one_or_none()
+                    if first_clause:
+                        await _save_anomaly(
+                            first_clause,
+                            full_doc_result,
+                            "full_document_country_law",
+                            verified=True,
+                        )
+                        logger.info("document %s: full-document anomaly saved", document_id)
+
+        # Always run country law anomaly detection on clauses
+        country_count = await detect_anomalies_country_law(document_id, country=country)
+        logger.info("document %s: %d anomalies from country law (country=%s)", document_id, country_count, country)
+
+        # Run document-level analysis to catch cross-paragraph contradictions
+        # and legal violations that span multiple clauses
+        doc_level_count = await detect_document_level_anomalies(document_id, country=country)
+        logger.info("document %s: %d document-level anomalies", document_id, doc_level_count)
+
+        # Wait for reference docs and run reference doc anomaly detection if refs exist
+        await _wait_for_reference_docs(str(doc.case_id))
+        ref_count = await detect_anomalies_reference_docs(document_id, str(doc.case_id))
+        logger.info("document %s: %d anomalies from reference docs", document_id, ref_count)
 
         async with SessionLocal() as session:
             await session.execute(

@@ -1,8 +1,10 @@
+import asyncio
 import json
 import logging
 import re
 import time
 from pathlib import Path
+from string import Template
 from typing import Any
 
 import groq
@@ -17,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def _strip_markdown(text: str) -> str:
     """Strip markdown code block wrapping from LLM responses."""
-    match = re.search(r"```(?:json)?\\s*\\n?(.*?)\\n?\\s*```", text, re.DOTALL)
+    match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, re.DOTALL)
     if match:
         return match.group(1).strip()
     return text.strip()
@@ -25,7 +27,7 @@ def _strip_markdown(text: str) -> str:
 
 def _strip_think_tags(text: str) -> str:
     """Strip thinking blocks from Qwen model responses."""
-    pattern = r"<!think>.*?<!/think>"
+    pattern = r"<think>.*?</think>\n?"
     return re.sub(pattern, "", text, flags=re.DOTALL).strip()
 
 
@@ -159,26 +161,31 @@ class GroqProvider(LLMProvider):
         country_code: str | None = None,
         reference_context: str | None = None,
     ) -> dict[str, Any]:
-        """Compare a clause against a firm standard template and optionally country laws.
-        Returns: {"is_anomaly": bool, "severity": str, "reasons": str, "confidence": float}
+        """Compare a clause against the relevant country's laws using LLM's legal knowledge.
+        Returns: {"is_anomaly": bool, "severity": str, "reasons": str, "confidence": float,
+                  "applicable_law": str, "document_type": str}
         """
         cache_key = f"{clause_text[:2000]}{standard_text[:2000]}{country_code or ''}{reference_context[:2000] if reference_context else ''}"
-        cached = get_cached("anomaly", cache_key)
-        if cached:
-            return cached  # type: ignore[return-value]
-        default = {"is_anomaly": False, "severity": "low", "reasons": "", "confidence": 0.0}
+        default = {
+            "is_anomaly": False,
+            "severity": "low",
+            "reasons": "",
+            "confidence": 0.0,
+            "applicable_law": "",
+            "document_type": "",
+        }
         try:
             if country_code:
-                from core.countries import get_legislation_summary
-
-                legislation_summary = get_legislation_summary(country_code)
-                prompt = self._load_prompt("detect_anomalies_country.txt").format(
-                    legislation_summary=legislation_summary
+                raw = self._load_prompt("detect_anomalies_country.txt")
+                prompt = Template(raw).safe_substitute(
+                    country_code=country_code,
+                    standard_text=standard_text or "(none provided)",
                 )
                 user_content = (
-                    f"Clause type: {clause_type}\n\n"
-                    f"Extracted clause:\n{clause_text}\n\n"
-                    f"Firm standard template:\n{standard_text or '(none provided)'}"
+                    f"Document type context: {clause_type}\n\n"
+                    f"Full document/clause text:\n{clause_text}\n\n"
+                    f"Analyze this document for legal anomalies, cross-paragraph contradictions, "
+                    f"and violations of {country_code} law."
                 )
             else:
                 prompt = self._load_prompt("detect_anomalies.txt")
@@ -206,7 +213,7 @@ class GroqProvider(LLMProvider):
                     {"role": "user", "content": user_content},
                 ],
                 temperature=0.0,
-                max_tokens=1024,
+                max_tokens=2048,
             )
             cleaned = _strip_think_tags(_strip_markdown(content))
             try:
@@ -217,6 +224,91 @@ class GroqProvider(LLMProvider):
         except groq.RateLimitError as e:
             logger.warning("detect_anomalies rate limited after %.2fs, using default: %s", time.monotonic() - e.__traceback__.tb_frame.f_locals.get('_start', 0), str(e))
             result = default
+        set_cached("anomaly", cache_key, result)
+        return result
+
+    async def analyze_full_document(
+        self,
+        full_text: str,
+        country_code: str,
+    ) -> dict[str, Any]:
+        """Analyze the COMPLETE document text for legal anomalies.
+        This is the most powerful analysis mode — it sees the entire document
+        at once and can detect cross-paragraph contradictions and violations
+        of the country's laws that span multiple sections.
+
+        Returns: {"is_anomaly": bool, "severity": str, "reasons": str, "confidence": float,
+                  "applicable_law": str, "document_type": str, "violations": list}
+        """
+        cache_key = f"full_doc:{full_text[:2000]}{country_code}"
+        default = {
+            "is_anomaly": False,
+            "severity": "low",
+            "reasons": "",
+            "confidence": 0.0,
+            "applicable_law": "",
+            "document_type": "",
+            "violations": [],
+        }
+
+        try:
+            # Use a focused prompt for full-document analysis
+            system_prompt = f"""You are an expert legal analyst with deep knowledge of {country_code} law. Your job is to analyze a COMPLETE legal document and identify any violations of the law.
+
+Focus on:
+1. **Cross-paragraph contradictions**: Facts stated in one paragraph that contradict other paragraphs
+2. **Legal compliance**: Claims, distributions, or positions that violate {country_code} law
+3. **Exclusion of legal heirs**: For inheritance/family matters, identify if legal heirs are being excluded
+4. **Incorrect legal procedures**: Steps taken that don't follow the law
+
+For {country_code} inheritance/family law matters, recall:
+- Pakistan (PK): Muslim Family Laws Ordinance 1961, Islamic Sharia inheritance, parents ARE legal heirs, specific share rules
+- India (IN): Hindu Succession Act 1956, Muslim Personal Law, parents ARE legal heirs
+- UK/US: Intestacy laws, parents may or may not be heirs depending on jurisdiction
+
+Return ONLY valid JSON:
+{{
+  "is_anomaly": boolean,
+  "severity": "high" | "medium" | "low" | "none",
+  "reasons": "Detailed explanation of what the law states, what the document says, and why they conflict",
+  "confidence": float 0-1,
+  "applicable_law": "specific law name",
+  "document_type": "type of legal matter",
+  "violations": ["list of specific violations found"]
+}}
+
+Be thorough. If parents are mentioned as alive but excluded from inheritance, this is a CLEAR VIOLATION of Islamic inheritance law in Pakistan. Flag it with high confidence (0.8-0.95)."""
+
+            user_content = f"""Analyze this COMPLETE legal document from {country_code}:
+
+{full_text}
+
+Identify ALL legal violations, cross-paragraph contradictions, and compliance issues."""
+
+            content = await _make_llm_call(
+                self,
+                self.model,
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content},
+                ],
+                temperature=0.0,
+                max_tokens=3000,
+            )
+
+            cleaned = _strip_think_tags(_strip_markdown(content))
+            logger.info("full document analysis response: %s", cleaned[:500])
+
+            try:
+                result: dict[str, Any] = json.loads(cleaned)
+            except json.JSONDecodeError:
+                logger.warning("analyze_full_document JSON parse failed: %s", cleaned[:300])
+                result = default
+
+        except groq.RateLimitError as e:
+            logger.warning("analyze_full_document rate limited: %s", str(e))
+            result = default
+
         set_cached("anomaly", cache_key, result)
         return result
 

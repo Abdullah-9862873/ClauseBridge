@@ -21,7 +21,7 @@ class Anomaly(Base):
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     reviewed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     source: Mapped[str] = mapped_column(
-        String(20), default="country_law", nullable=False
+        String(50), default="country_law", nullable=False
     )
     matched_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
     verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

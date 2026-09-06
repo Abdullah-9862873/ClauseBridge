@@ -1,0 +1,18 @@
+# Generated knowledge graph (graphify local output, rebuilt by `graphify update`)
+graphify-out/
+
+.venv/
+
+__pycache__/
+
+.mypy_cache/
+
+.ruff_cache/
+
+.env
+
+clausebridge-api.code-workspace/
+
+.vscode/
+
+clausebridge_api.egg-info/

@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clausebridge-api"
+version = "1.0.0"
+description = "ClauseBridge backend API"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic-settings",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "alembic",
+    "pgvector",
+    "boto3",
+    "celery",
+    "redis",
+    "pypdf",
+    "sentence-transformers",
+    "fpdf2",
+]
+
+[dependency-groups]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+]
+[tool.ruff]
+line-length = 88
+[tool.mypy]
+strict = true
+python_version = "3.13"
+plugins = ["pydantic.mypy"]
+exclude = ["alembic/versions/*"]
+
+[tool.setuptools.packages.find]
+include = ["core*", "db*", "models*", "storage*", "workers*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

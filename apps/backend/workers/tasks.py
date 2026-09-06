@@ -11,7 +11,7 @@ from sqlalchemy import and_, or_, select, update
 
 from db.session import SessionLocal
 from models import Document, ReferenceDocument, ReferenceChunk
-from services.anomaly_detection_service import detect_anomalies_for_document
+from services.anomaly_detection_service import detect_anomalies_country_law, detect_anomalies_reference_docs
 from services.classification_service import classify_document
 from services.clause_extraction_service import extract_and_store_clauses
 from services.injection_guard import check_injection
@@ -126,9 +126,14 @@ async def _run_pipeline(document_id: str) -> None:
             clause_count = await extract_and_store_clauses(document_id, text)
             logger.info("document %s saved %d clauses", document_id, clause_count)
             country = doc.country if hasattr(doc, "country") else None
+
+            country_count = await detect_anomalies_country_law(document_id, country=country)
+            logger.info("document %s: %d anomalies from country law (country=%s)", document_id, country_count, country)
+
             await _wait_for_reference_docs(str(doc.case_id))
-            anomalies_found = await detect_anomalies_for_document(document_id, country=country)
-            logger.info("document %s: %d anomalies found (country=%s)", document_id, anomalies_found, country)
+            ref_count = await detect_anomalies_reference_docs(document_id, str(doc.case_id))
+            logger.info("document %s: %d anomalies from reference docs", document_id, ref_count)
+
         async with SessionLocal() as session:
             await session.execute(
                 update(Document)

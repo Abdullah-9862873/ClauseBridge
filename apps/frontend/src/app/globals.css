@@ -751,3 +751,15 @@ tr.row-link:hover { background: #FBFAF6; }
   from { opacity: 0; transform: translateX(40px); }
   to { opacity: 1; transform: translateX(0); }
 }
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--ink-20);
+  border-top-color: var(--ink-50);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

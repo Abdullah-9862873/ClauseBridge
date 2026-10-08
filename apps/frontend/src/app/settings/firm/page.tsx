@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useToast } from '@/lib/toast-context';
+import { authFetch } from '@/lib/token-refresh';
 import UserChip from '@/components/UserChip';
 
-const API = 'http://localhost:8000';
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 interface Firm {
   id: string;
@@ -21,11 +22,7 @@ export default function FirmSettingsPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (!token) return;
-    fetch(`${API}/api/v1/firms/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    authFetch(`${API}/api/v1/firms/me`)
       .then((res) => {
         if (!res.ok) throw new Error();
         return res.json();
@@ -48,12 +45,10 @@ export default function FirmSettingsPage() {
     }
     setSaving(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch(`${API}/api/v1/firms/me`, {
+      const res = await authFetch(`${API}/api/v1/firms/me`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ name: name.trim() }),
       });

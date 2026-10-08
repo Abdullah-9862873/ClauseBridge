@@ -5,7 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.security import decode_token
-from db.session import get_session
+from db.session import get_session_with_retry as get_session
 from models import User
 
 bearer_scheme = HTTPBearer(auto_error=True)

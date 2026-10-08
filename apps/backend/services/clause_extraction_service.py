@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from db.session import SessionLocal
+from db.session import CelerySessionLocal as SessionLocal
 from llm.groq_provider import GroqProvider
 from models.clause import Clause
 from workers.embeddings import embed_texts

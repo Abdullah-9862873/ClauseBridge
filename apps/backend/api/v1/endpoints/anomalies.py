@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.v1.deps import get_current_user
-from db.session import get_session
+from db.session import get_session_with_retry as get_session
 from models import Anomaly, Clause, Document, User
 
 router = APIRouter(prefix="/cases", tags=["anomalies"])
@@ -81,6 +81,9 @@ async def list_anomalies(
                 "reasons": a.reasons,
                 "confidence": a.confidence,
                 "reviewed": a.reviewed,
+                "source": a.source,
+                "matched_reference": a.matched_reference,
+                "verified": a.verified,
                 "created_at": a.created_at.isoformat(),
             }
             for a in items

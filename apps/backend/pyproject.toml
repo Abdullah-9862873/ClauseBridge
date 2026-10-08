@@ -27,6 +27,9 @@ dependencies = [
 dev = [
     "ruff",
     "mypy",
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
 ]
 [tool.ruff]
 line-length = 88
@@ -38,3 +41,7 @@ exclude = ["alembic/versions/*"]
 
 [tool.setuptools.packages.find]
 include = ["core*", "db*", "models*", "storage*", "workers*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

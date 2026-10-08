@@ -8,6 +8,9 @@ import { useDocument, useClauses, useAnomalies, useMarkReviewed, getPdfUrl } fro
 import type { Anomaly } from '@/lib/hooks';
 import { PdfViewer, type PdfViewerHandle } from '@/components/PdfViewer';
 import UserChip from '@/components/UserChip';
+import { authFetch } from '@/lib/token-refresh';
+
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 const SEVERITY_SEV: Record<string, string> = {
   high: 'sev high',
@@ -54,10 +57,8 @@ export default function DocumentDetailPage() {
           const params = new URLSearchParams({ document_id: docId, limit: '100' });
           if (f.severity) params.set('severity', f.severity);
           if (f.reviewed !== undefined) params.set('reviewed', String(f.reviewed));
-          const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-          const res = await fetch(
-            `http://localhost:8000/api/v1/cases/${caseId}/anomalies?${params}`,
-            { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+          const res = await authFetch(
+            `${API}/api/v1/cases/${caseId}/anomalies?${params}`
           );
           if (!res.ok) throw new Error('Failed to fetch anomalies');
           return res.json();
@@ -354,14 +355,25 @@ export default function DocumentDetailPage() {
                         <div className="anomaly-detail">
                           <div className="anomaly-detail-header">
                             <span className="anomaly-detail-title">Anomaly Detail</span>
-                            <span
-                              className="anomaly-detail-severity"
-                              style={{
-                                background: anomaly.severity === 'high' ? 'var(--flag)' : anomaly.severity === 'medium' ? 'var(--brass)' : 'var(--ok)',
-                              }}
-                            >
-                              {anomaly.severity}
-                            </span>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              {anomaly.verified && (
+                                <span style={{
+                                  fontSize: '10px', fontWeight: 600, padding: '2px 8px',
+                                  borderRadius: '10px', color: '#fff', background: 'var(--ok)',
+                                  textTransform: 'uppercase', letterSpacing: '0.4px',
+                                }}>
+                                  Verified
+                                </span>
+                              )}
+                              <span
+                                className="anomaly-detail-severity"
+                                style={{
+                                  background: anomaly.severity === 'high' ? 'var(--flag)' : anomaly.severity === 'medium' ? 'var(--brass)' : 'var(--ok)',
+                                }}
+                              >
+                                {anomaly.severity}
+                              </span>
+                            </div>
                           </div>
                           <div className="anomaly-detail-grid">
                             <div className="anomaly-detail-field">
@@ -374,12 +386,26 @@ export default function DocumentDetailPage() {
                               </div>
                             </div>
                             <div className="anomaly-detail-field">
+                              <span className="anomaly-detail-label">Source</span>
+                              <span className="anomaly-detail-value" style={{ textTransform: 'capitalize' }}>
+                                {anomaly.source === 'reference_doc' ? 'Reference Document' : anomaly.source === 'country_law' ? 'Country Law' : 'Firm Standard'}
+                              </span>
+                            </div>
+                            <div className="anomaly-detail-field">
                               <span className="anomaly-detail-label">Detected</span>
                               <span className="anomaly-detail-value">
                                 {new Date(anomaly.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                               </span>
                             </div>
                           </div>
+                          {anomaly.matched_reference && (
+                            <div className="anomaly-detail-reason" style={{ borderLeft: '3px solid var(--brass)', paddingLeft: '12px', marginTop: '10px' }}>
+                              <span className="anomaly-detail-label">Matched Reference</span>
+                              <p style={{ fontSize: '12.5px', fontStyle: 'italic', color: 'var(--ink-50)', marginTop: '4px' }}>
+                                {anomaly.matched_reference}
+                              </p>
+                            </div>
+                          )}
                           <div className="anomaly-detail-reason">
                             <span className="anomaly-detail-label">Reasoning</span>
                             <p>{anomaly.reasons}</p>

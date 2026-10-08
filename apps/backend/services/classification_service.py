@@ -3,7 +3,7 @@ from typing import Any
 
 from sqlalchemy import update
 
-from db.session import SessionLocal
+from db.session import CelerySessionLocal as SessionLocal
 from llm.groq_provider import GroqProvider
 from models.document import Document
 

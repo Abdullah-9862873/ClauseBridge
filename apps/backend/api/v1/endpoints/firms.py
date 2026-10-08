@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.v1.deps import get_current_user, require_admin
 from core.security import hash_password
-from db.session import get_session
+from db.session import get_session_with_retry as get_session
 from models import Firm, User
 
 router = APIRouter(prefix="/firms", tags=["firms"])

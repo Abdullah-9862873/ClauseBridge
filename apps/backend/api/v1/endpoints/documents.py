@@ -5,7 +5,7 @@ from typing import Annotated
 
 import redis
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +14,7 @@ from api.v1.deps import get_current_user
 from api.v1.endpoints.cases import _get_owned_case
 from cache.llm_cache import _redis
 from core.security import decode_token
-from db.session import get_session
+from db.session import get_session_with_retry as get_session
 from models import Anomaly, Clause, Document, User
 from storage.s3_client import download_object, upload_file_to_storage
 from workers.tasks import ingest_document
@@ -33,6 +33,7 @@ async def create_document(
     session: Annotated[AsyncSession, Depends(get_session)],
     file: UploadFile = File(...),  # noqa: B008
     idempotency_key: str = Header(...),
+    country: str | None = Form(default=None),
 ) -> dict[str, str]:
     case = await _get_owned_case(case_id, user, session)
 
@@ -77,6 +78,7 @@ async def create_document(
         status="queued",
         file_type="pdf",
         idempotency_key_hash=key_hash,
+        country=country,
     )
     session.add(doc)
     await session.commit()
@@ -107,6 +109,7 @@ async def list_documents(
                 "status": d.status,
                 "document_type": d.document_type,
                 "classification_confidence": d.classification_confidence,
+                "country": d.country,
                 "created_at": d.created_at.isoformat(),
             }
             for d in documents
